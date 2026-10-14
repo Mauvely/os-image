@@ -16,19 +16,28 @@ superproject. Read it before changing anything here.
 | `rootfs/` | Files copied over `/` in the image: the seal unit and script, the bootc install config, branding |
 | `scripts/build.sh` | The one way to build, locally and in CI. Warns when `../agent` is not at `agent.ref` |
 | `scripts/publish-flatpak.sh` | Bundles from the release feed into the signed Flatpak repo. `test-publish-flatpak.sh` tries it with a throwaway key |
-| `keys/` | The Flatpak signing key's public half |
-| `.github/workflows/` | `build.yml` (build and lint, pushes nowhere) and `publish-flatpak.yml` (by hand only) |
+| `scripts/test-image-policy.sh` | Tries a built image's signature policy against a throwaway registry and throwaway cosign keys |
+| `keys/` | The public halves: `mauvely-flatpak.gpg` for the Flatpak remote, `cosign.pub` for the image |
+| `.github/workflows/` | `build.yml` (build and lint, pushes nowhere), and `publish-image.yml` and `publish-flatpak.yml` (by hand only) |
 | `spikes/` | The P1 spike scripts, reused for VM tests. `proof/` holds what the runs showed |
 
 ## Rules
 
-- **Never push an image to a registry** until the registry choice is made (T4
-  in brief 19).
+- **Images go to `ghcr.io/mauvely/os` through `publish-image.yml` only**, and
+  dispatching it is Timur's call (T4 in brief 19). A session never pushes an
+  image and never dispatches the workflow. It tries the policy with
+  `scripts/test-image-policy.sh`.
+- **The image signature must be one containers/image can find.** cosign v3's
+  default bundle format is not, and an image signed that way is refused by
+  every device. `publish-image.yml` says why it pins v2. Change the version or
+  the flags only once `test-image-policy.sh` passes with them.
 - **Never commit a private key.** The Flatpak signing key's private half lives
-  only in the Actions secret `FLATPAK_GPG_KEY`.
-  - Its public half is committed here.
-  - Its fingerprint is `C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A`. Check any
-    public key file against it.
+  only in the Actions secret `FLATPAK_GPG_KEY`, and the image key's only in
+  `COSIGN_PRIVATE_KEY`.
+  - Both public halves are committed here.
+  - The Flatpak key's fingerprint is
+    `C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A`. Check any public key file
+    against it.
 - **The base image tag is pinned**, never `latest`. Moving it is a deliberate
   commit.
 - **Publishing the Flatpak remote is Timur's call.** A session does not

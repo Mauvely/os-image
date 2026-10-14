@@ -64,6 +64,18 @@ RUN . /usr/lib/os-release \
  && grep -q '^PRETTY_NAME="Mauvely OS ' /usr/lib/os-release \
  && grep -qx 'ID=fedora' /usr/lib/os-release
 
+# Images from ghcr.io/mauvely/os must carry Mauvely's cosign signature
+# (brief 19, T4). `bootc switch` and `bootc upgrade` pull through
+# containers/image, which applies this policy, so an unsigned or foreign image
+# under that name is refused before anything is staged. The rule is added to
+# the base's own policy rather than replacing it; the base allows anything by
+# default, and other registries keep that. registries.d/mauvely-os.yaml, in
+# rootfs/, tells containers/image where the signatures are.
+COPY keys/cosign.pub /etc/pki/containers/mauvely-os.pub
+RUN python3 -c 'import json; p = "/etc/containers/policy.json"; d = json.load(open(p)); d.setdefault("transports", {}).setdefault("docker", {})["ghcr.io/mauvely/os"] = [{"type": "sigstoreSigned", "keyPath": "/etc/pki/containers/mauvely-os.pub", "signedIdentity": {"type": "matchRepository"}}]; json.dump(d, open(p, "w"), indent=4)' \
+ && python3 -c 'import json; r = json.load(open("/etc/containers/policy.json"))["transports"]["docker"]["ghcr.io/mauvely/os"]; assert r[0]["type"] == "sigstoreSigned", r' \
+ && grep -q 'BEGIN PUBLIC KEY' /etc/pki/containers/mauvely-os.pub
+
 # Units.
 # - enabled: the agent, and the seal that runs before it.
 # - masked: everything in the base that applies an update and reboots, or that

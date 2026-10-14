@@ -1,7 +1,7 @@
 # Builds the image with podman and runs `bootc container lint` (the last RUN in
-# the Containerfile). It pushes nowhere and uploads nothing: the registry is
-# undecided (T4 in brief 19) and GitHub storage stays at zero. A green run means
-# the image builds and lints, nothing more.
+# the Containerfile). It pushes nowhere and uploads nothing, so GitHub storage
+# stays at zero; publish-image.yml is the one that pushes, by hand. A green run
+# means the image builds and lints, nothing more.
 #
 # ── Why it can exit green without building ──────────────────────────────────
 # os-agent is private, so GITHUB_TOKEN cannot read it, and the agent is built
@@ -22,6 +22,7 @@ on:
     paths:
       - Containerfile
       - agent.ref
+      - keys/cosign.pub
       - rootfs/**
       - scripts/build.sh
       - .github/workflows/build.yml

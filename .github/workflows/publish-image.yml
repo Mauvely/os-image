@@ -1,0 +1,205 @@
+# Publishes the Mauvely OS image to ghcr.io/mauvely/os, signed with cosign
+# (brief 19, T4). Devices follow one of two tags, `next` or `stable`: a
+# collection picks one, and website-devices names it `${OS_IMAGE_REPO}:<tag>`.
+#
+# By hand only, like the Flatpak remote. Moving a tag is an update that every
+# device following it stages.
+#
+#   channel=next     build this commit, push :next, sign it by digest, then pull
+#                    it back through the image's own signature policy
+#   channel=stable   move :stable to the digest :next holds now, once its
+#                    signature checks out. Nothing is rebuilt, so stable gets
+#                    exactly what was tried on next, byte for byte
+#
+# ── What it will not run without ────────────────────────────────────────────
+#   - os-image and os-agent public. The image is GPL-3.0 and is built from both.
+#   - keys/cosign.pub, the key the image trusts.
+#   - for next, the secrets COSIGN_PRIVATE_KEY and COSIGN_PASSWORD. They are
+#     created by `cosign generate-key-pair github://Mauvely/os-image`.
+# If anything is missing the run says what and ends green, without pushing.
+#
+# ── cosign v2, not v3 ───────────────────────────────────────────────────────
+# By default v3 signs in its new bundle format, and stores the signature where
+# containers/image does not look. Every device would then refuse the image with
+# "A signature was required, but no signature exists". Tried with
+# scripts/test-image-policy.sh. v3 signs in a form devices read when given
+# --new-bundle-format=false --use-signing-config=false; that is the way forward
+# once v2 is retired.
+
+name: Publish image
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: next builds and pushes; stable promotes what next holds
+        type: choice
+        options: [next, stable]
+        default: next
+        required: true
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/mauvely/os
+  COSIGN_VERSION: v2.6.5
+  COSIGN_SHA256: c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644
+
+jobs:
+  publish:
+    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check what publishing needs
+        id: gate
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          PRIVATE: ${{ github.event.repository.private }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          missing=()
+          [ "$PRIVATE" = false ] || missing+=("os-image is private")
+          GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code https://github.com/Mauvely/os-agent.git HEAD >/dev/null 2>&1 \
+            || missing+=("os-agent is private")
+          grep -q 'BEGIN PUBLIC KEY' keys/cosign.pub 2>/dev/null || missing+=("keys/cosign.pub is not committed")
+          if [ "$CHANNEL" = next ]; then
+            [ -n "$COSIGN_PRIVATE_KEY" ] || missing+=("the secret COSIGN_PRIVATE_KEY is not set")
+            [ -n "$COSIGN_PASSWORD" ] || missing+=("the secret COSIGN_PASSWORD is not set")
+            ref="$(tr -d '[:space:]' < agent.ref)"
+            [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || missing+=("agent.ref does not hold one full commit hash")
+            echo "agent_ref=$ref" >> "$GITHUB_OUTPUT"
+          fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::notice title=Nothing published::$(IFS=';'; echo "${missing[*]}")"
+            {
+              echo "### Nothing published"
+              echo
+              printf -- '- %s\n' "${missing[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install cosign
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL -o "$RUNNER_TEMP/bin/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-amd64"
+          echo "$COSIGN_SHA256  $RUNNER_TEMP/bin/cosign" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/cosign"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to ghcr.io
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$TOKEN" | podman login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$TOKEN" | cosign login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # ── next ────────────────────────────────────────────────────────────────
+
+      - name: Make room on the runner
+        # GitHub-hosted only, and that guard is load-bearing: this deletes the
+        # Android SDK, .NET, GHC and every Docker image on the machine, which is
+        # reclaiming space on a throwaway runner and vandalism on one we own.
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next' && runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/local/lib/android \
+                      /usr/share/dotnet \
+                      /opt/ghc \
+                      /usr/local/.ghcup \
+                      /usr/local/share/powershell \
+                      /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY/CodeQL" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+
+      - name: Check out os-agent at the pinned commit
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        uses: actions/checkout@v4
+        with:
+          repository: Mauvely/os-agent
+          ref: ${{ steps.gate.outputs.agent_ref }}
+          path: agent
+
+      - name: Build the image
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        run: AGENT_DIR=agent TAG=localhost/mauvely-os:publish JOBS=8 scripts/build.sh
+
+      - name: Push to next
+        id: push
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        # :next is pushed before it is signed. A device that pulls in the seconds
+        # between is refused, reports it at check-in, and stages it next time.
+        run: |
+          podman push --digestfile "$RUNNER_TEMP/digest" localhost/mauvely-os:publish "docker://$IMAGE:next"
+          digest="$(cat "$RUNNER_TEMP/digest")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::podman push gave no digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Sign by digest
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        # The signature is also recorded in the public Rekor log.
+        run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
+
+      - name: Pull it back the way a device does
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        # The image's own policy.json and registries.d. Only the key's path is
+        # moved, to the committed key the image was built with. A signature that
+        # cosign accepts but containers/image cannot find fails here, not on
+        # every device.
+        run: |
+          mkdir -p "$RUNNER_TEMP/registries.d"
+          podman run --rm localhost/mauvely-os:publish cat /etc/containers/registries.d/mauvely-os.yaml \
+            > "$RUNNER_TEMP/registries.d/mauvely-os.yaml"
+          podman run --rm localhost/mauvely-os:publish cat /etc/containers/policy.json \
+            | python3 -c 'import json, sys; d = json.load(sys.stdin); d["transports"]["docker"]["ghcr.io/mauvely/os"][0]["keyPath"] = sys.argv[1]; json.dump(d, sys.stdout)' \
+                "$PWD/keys/cosign.pub" > "$RUNNER_TEMP/policy.json"
+          skopeo --policy "$RUNNER_TEMP/policy.json" --registries.d "$RUNNER_TEMP/registries.d" \
+            copy -q "docker://$IMAGE@$DIGEST" "dir:$RUNNER_TEMP/pulled"
+          rm -rf "$RUNNER_TEMP/pulled"
+          {
+            echo "### Published to \`$IMAGE:next\`"
+            echo
+            echo "- digest: \`$DIGEST\`"
+            echo "- os-image: \`$GITHUB_SHA\`"
+            echo "- agent: \`${{ steps.gate.outputs.agent_ref }}\`"
+            echo "- signed, and accepted by the image's own signature policy"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── stable ──────────────────────────────────────────────────────────────
+
+      - name: Promote next to stable
+        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'stable'
+        # Same repository, same digest, so the signature next carries is
+        # already stable's. --preserve-digests refuses rather than re-encode.
+        run: |
+          digest="$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:next")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$IMAGE:next has no digest"; exit 1; }
+          cosign verify --key keys/cosign.pub "$IMAGE@$digest" >/dev/null
+          skopeo copy -q --preserve-digests "docker://$IMAGE@$digest" "docker://$IMAGE:stable"
+          now="$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:stable")"
+          [ "$now" = "$digest" ] || { echo "::error::$IMAGE:stable is $now, not $digest"; exit 1; }
+          {
+            echo "### Promoted to \`$IMAGE:stable\`"
+            echo
+            echo "- digest: \`$digest\`, the one next holds, signature checked"
+          } >> "$GITHUB_STEP_SUMMARY"

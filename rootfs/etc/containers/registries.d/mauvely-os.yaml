@@ -1,0 +1,7 @@
+# Mauvely OS images are signed with cosign, and the signatures sit beside them
+# in the registry as sigstore attachments. Without this file containers/image
+# never looks for them, so the rule for ghcr.io/mauvely/os in
+# /etc/containers/policy.json would refuse every image, signed or not.
+docker:
+  ghcr.io/mauvely/os:
+    use-sigstore-attachments: true
