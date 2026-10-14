@@ -1,0 +1,112 @@
+# Builds the image with podman and runs `bootc container lint` (the last RUN in
+# the Containerfile). It pushes nowhere and uploads nothing: the registry is
+# undecided (T4 in brief 19) and GitHub storage stays at zero. A green run means
+# the image builds and lints, nothing more.
+#
+# ── Why it can exit green without building ──────────────────────────────────
+# os-agent is private, so GITHUB_TOKEN cannot read it, and the agent is built
+# into the image. Until the secret OS_AGENT_TOKEN exists (a token that can read
+# Mauvely/os-agent) or os-agent is public, this job says so in the summary and
+# stops without failing, the way translate.yml does without its key. Once
+# os-agent is public it builds with no secret at all.
+#
+# ── Why it is not on every push ─────────────────────────────────────────────
+# The repository is private, so minutes count. It runs when the image's inputs
+# change, and by hand.
+
+name: Build image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Containerfile
+      - agent.ref
+      - rootfs/**
+      - scripts/build.sh
+      - .github/workflows/build.yml
+  workflow_dispatch:
+
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pinned agent commit, and the token to read it
+        id: pin
+        env:
+          OS_AGENT_TOKEN: ${{ secrets.OS_AGENT_TOKEN }}
+        run: |
+          ref="$(tr -d '[:space:]' < agent.ref)"
+          if ! [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=agent.ref::agent.ref must hold one full commit hash, got '$ref'"
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          # Once os-agent is public the token is not needed, and this finds out by
+          # asking without one.
+          if [ -z "$OS_AGENT_TOKEN" ] \
+             && ! GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code https://github.com/Mauvely/os-agent.git HEAD >/dev/null 2>&1; then
+            echo "::warning title=Image not built::OS_AGENT_TOKEN is not set. os-agent is private, so the agent cannot be fetched. Create a token that can read Mauvely/os-agent and add it as the secret OS_AGENT_TOKEN, or make os-agent public."
+            {
+              echo "### Image not built"
+              echo
+              echo "The secret \`OS_AGENT_TOKEN\` is not set, and os-agent (pinned at \`${ref:0:12}\`) is private."
+              echo "Add a token that can read \`Mauvely/os-agent\`, or make that repository public, and run this workflow again."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Make room on the runner
+        # GitHub-hosted only, and that guard is load-bearing: this deletes the
+        # Android SDK, .NET, GHC and every Docker image on the machine, which is
+        # reclaiming space on a throwaway runner and vandalism on one we own.
+        # The Kinoite base is 7.4 GB and the build holds it twice.
+        if: steps.pin.outputs.ready == 'true' && runner.environment == 'github-hosted'
+        run: |
+          echo "Before:"; df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android \
+                      /usr/share/dotnet \
+                      /opt/ghc \
+                      /usr/local/.ghcup \
+                      /usr/local/share/powershell \
+                      /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY/CodeQL" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          echo "After:"; df -h / | tail -1
+
+      - name: Check out os-agent at the pinned commit
+        if: steps.pin.outputs.ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Mauvely/os-agent
+          ref: ${{ steps.pin.outputs.ref }}
+          token: ${{ secrets.OS_AGENT_TOKEN || github.token }}
+          path: agent
+
+      - name: Build the image (ends with bootc container lint)
+        if: steps.pin.outputs.ready == 'true'
+        run: |
+          podman --version
+          AGENT_DIR=agent TAG=localhost/mauvely-os:ci JOBS=8 scripts/build.sh
+
+      - name: Summary
+        if: steps.pin.outputs.ready == 'true'
+        run: |
+          {
+            echo "### Image built and linted"
+            echo
+            echo "- agent: \`${{ steps.pin.outputs.ref }}\`"
+            echo "- image: $(podman image inspect --format '{{.Size}}' localhost/mauvely-os:ci | numfmt --to=iec) on disk, not pushed"
+          } >> "$GITHUB_STEP_SUMMARY"

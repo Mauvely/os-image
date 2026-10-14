@@ -1,0 +1,83 @@
+#!/usr/bin/bash
+# mauvely-seal: the two disk jobs `bootc install --block-setup tpm2-luks` leaves
+# undone (brief 19, S1 traps 2 and 3, and "What binds the disk key"). It runs
+# at every boot, before mauvelyd.service, and does nothing on a machine that is
+# already right, so it needs no "first boot" marker and repairs a first boot
+# that died halfway.
+#
+# 1. bootc binds the LUKS key to the TPM with no PCRs at all, which is the bare
+#    TPM: the disk would unlock with Secure Boot off, or with anything else
+#    booted on the same machine. Re-enrol the token on PCR 7.
+# 2. bootc puts luks.options=tpm2-device=auto,headless=true on the command
+#    line, and headless=true means no passphrase prompt, so the recovery key
+#    could not be typed anywhere after a PCR 7 change. Drop headless=true. It
+#    takes effect at the next boot; this script never reboots.
+#
+# It never touches the recovery slot. `--wipe-slot=tpm2` removes TPM2 slots
+# only, and the new one is enrolled before the old one goes. The recovery key
+# is the installer's to add, at install time.
+set -u
+
+log() { printf 'mauvely-seal: %s\n' "$*"; }
+rc=0
+
+# The device holding the root LUKS volume, found from the running system. On a
+# bootc machine /sysroot is the volume's mount; `cryptsetup status` names what
+# is under the mapper. Prints nothing, and fails, when root is not on LUKS2.
+root_luks_device() {
+    local src
+    src=$(findmnt -rno SOURCE /sysroot 2>/dev/null) || src=$(findmnt -rno SOURCE / 2>/dev/null) || return 1
+    src=${src%%\[*}
+    [ -b "$src" ] || return 1
+    cryptsetup status "$src" 2>/dev/null | awk '
+        $1 == "type:"   { t = $2 }
+        $1 == "device:" { d = $2 }
+        END { if (t == "LUKS2" && d != "") print d; else exit 1 }'
+}
+
+# none: no systemd-tpm2 token. unbound: one with an empty PCR list, which is
+# the state bootc leaves. bound: every TPM2 token names PCRs. Prints nothing
+# if the header cannot be read.
+tpm2_state() {
+    cryptsetup luksDump --dump-json-metadata "$1" 2>/dev/null | jq -r '
+        [.tokens[]? | select(.type == "systemd-tpm2")] as $t
+        | if ($t | length) == 0 then "none"
+          elif any($t[]; ((.["tpm2-pcrs"] // []) | length) == 0) then "unbound"
+          else "bound" end'
+}
+
+if dev=$(root_luks_device); then
+    case $(tpm2_state "$dev") in
+        unbound)
+            log "TPM2 token on $dev is bound to no PCRs; re-enrolling it on PCR 7"
+            # One enrolment per call. The old TPM2 slot goes only after the new
+            # one exists, and no other kind of slot is named.
+            systemd-cryptenroll --unlock-tpm2-device=auto --tpm2-device=auto \
+                --tpm2-pcrs=7 --wipe-slot=tpm2 "$dev" || { log "re-enrolment failed"; rc=1; }
+            ;;
+        bound) log "TPM2 token on $dev already names PCRs" ;;
+        none)  log "$dev has no TPM2 token; nothing to re-enrol" ;;
+        *)     log "cannot read the LUKS header of $dev"; rc=1 ;;
+    esac
+else
+    log "root is not on a LUKS2 volume; nothing to re-enrol"
+fi
+
+bad='luks.options=tpm2-device=auto,headless=true'
+good='luks.options=tpm2-device=auto'
+if tr ' ' '\n' < /proc/cmdline | grep -qxF -- "$bad"; then
+    # `rpm-ostree kargs` builds a new deployment from the booted one, so run
+    # over an image the agent has already staged it would replace that image.
+    # Wait for the reboot instead; this runs again on the next boot.
+    if bootc status --json 2>/dev/null | jq -e '.status.staged != null' >/dev/null; then
+        log "a deployment is already staged; leaving $bad until the next boot"
+    else
+        log "dropping headless=true from luks.options (takes effect at the next boot)"
+        # --replace cannot parse a value that contains "=", so delete and append.
+        rpm-ostree kargs --delete="$bad" --append="$good" || { log "kargs change failed"; rc=1; }
+    fi
+else
+    log "luks.options carries no headless=true"
+fi
+
+exit "$rc"

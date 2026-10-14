@@ -1,0 +1,18 @@
+[Unit]
+Description=Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt)
+Documentation=https://github.com/Mauvely/os-image
+ConditionPathExists=/run/ostree-booted
+After=local-fs.target
+# The agent stages images, and `rpm-ostree kargs` in the script builds a new
+# deployment from the booted one. Ordering only: a disk problem must not stop
+# the agent from starting.
+Before=mauvelyd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/mauvely/seal
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

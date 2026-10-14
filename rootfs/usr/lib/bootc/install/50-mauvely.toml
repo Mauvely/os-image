@@ -1,0 +1,11 @@
+# bootc reads /usr/lib/bootc/install/*.toml. The base image names no root
+# filesystem, so without this `bootc install` needs --filesystem on every call.
+#
+# `block` has to be spelled out. Once any install config exists, bootc reads a
+# missing `block` as ["direct"] and refuses --block-setup tpm2-luks with
+# "Block setup Tpm2Luks is not enabled in installation config".
+[install]
+block = ["direct", "tpm2-luks"]
+
+[install.filesystem.root]
+type = "xfs"
