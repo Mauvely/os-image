@@ -247,10 +247,12 @@ once that is installed.
 - **T4's first publish**, steps 3 and 4 above: the dispatch, then the
   package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
-- Plan 20 (ids to `com.mauvely.*`): the publish script reads ids from the bundles,
-  so the first publish after the move adds the new refs. The old
-  `app/net.mauvely.*` refs stay in the remote until someone runs `ostree refs
-  --delete` on them, and a device with the old id assigned has to be migrated.
+- Plan 20 (ids to `com.mauvely.<key>`) is in the apps' `main` since
+  2026-10-14, and website-devices' catalog moves with migration 0002. The
+  remote has never been published, so **run the first publish only after
+  Compose and Sotto have released with the new ids**: the script reads the id
+  from the bundle, and a bundle from an older release would put an
+  `app/net.mauvely.*` ref in the remote that no device is told to install.
 
 ## Tried and rejected
 

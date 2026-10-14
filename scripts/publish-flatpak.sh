@@ -8,8 +8,8 @@
 #   1. reads the release feed and takes the newest `flatpak` item for linux-x86_64,
 #   2. downloads it and checks its sha256 against the feed,
 #   3. imports it into a scratch repo, which says what its ref is: the app id is
-#      read from the bundle, never written down here (ids are moving from
-#      net.mauvely.* to com.mauvely.*),
+#      read from the bundle, never written down here (ids moved from
+#      net.mauvely.*.app to com.mauvely.* in plan 20),
 #   4. re-brands that ref to $BRANCH with `flatpak build-commit-from`, which
 #      rewrites the ref binding inside the commit and signs it. Importing with
 #      --ref=.../stable instead publishes, and then fails on install,

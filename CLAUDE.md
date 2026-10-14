@@ -49,8 +49,8 @@ superproject. Read it before changing anything here.
 - **`bootc install`, the seal script and anything else that touches a disk run
   in a VM** (`spikes/`), never on the host.
 - **Ids must agree with the apps' own.** Flatpak app ids are the apps'
-  reverse-DNS ids (`net.mauvely.*`), byte for byte, or Wayland loses the window
-  icon.
+  reverse-DNS ids (`com.mauvely.<key>`, since plan 20; `net.mauvely.<key>.app`
+  before), byte for byte, or Wayland loses the window icon.
 
 ## Handing off
 
