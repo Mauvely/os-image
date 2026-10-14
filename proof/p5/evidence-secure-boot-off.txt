@@ -1,0 +1,12 @@
+P5, same disk and TPM, Secure Boot switched off (OVMF vars with SecureBootEnable=False)
+1. boot stops at the prompt (proof/p5/p5-sb-off-recovery-prompt.png): PCR 7 changed, the TPM refused, and headless=true is gone from luks.options, so systemd asks for the recovery key.
+2. the recovery key (enrolled by the host, as the installer will) typed at the prompt via QMP:
+2026-10-14 02:07:52
+SecureBoot disabled
+luks.options=tpm2-device=auto
+SLOT TYPE
+   0 recovery
+   2 tpm2
+3. back on the original vars: no prompt, ssh answers
+SecureBoot enabled
+2026-10-14 02:10:10

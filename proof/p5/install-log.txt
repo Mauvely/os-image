@@ -1,0 +1,104 @@
+P5: spikes/p5-install.sh, the installer VM, the image localhost/mauvely-os:p5-ssh (the P5 image plus the one-line sshd layer).
+No --filesystem on the command line: the xfs below comes from /usr/lib/bootc/install/50-mauvely.toml.
+The recovery key goes to the host's machine dir (not shown); this log is the VM's stderr only.
+
+Installing image: docker://registry.invalid/mauvely/os:p5
+Digest: sha256:e18b1d751fd371ccd79c52fe40c74f87b90f9e53077f154cce7478575c2cda77
+Wiping /dev/vdb
+Wiping device /dev/vdb
+Block setup: tpm2-luks
+       Size: 64424509440
+     Serial: TARGET
+      Model: <unknown>
+ Partitions: UUID
+Checking that no-one is using this disk right now ... OK
+
+Disk /dev/vdb: 60 GiB, 64424509440 bytes, 125829120 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+>>> Script header accepted.
+>>> Script header accepted.
+>>> Created a new GPT disklabel (GUID: C22FB213-ABDB-46BB-A71A-67A13B56DEC4).
+/dev/vdb1: Created a new partition 1 of type 'BIOS boot' and of size 1 MiB.
+/dev/vdb2: Created a new partition 2 of type 'EFI System' and of size 512 MiB.
+/dev/vdb3: Created a new partition 3 of type 'Linux filesystem' and of size 510 MiB.
+/dev/vdb4: Created a new partition 4 of type 'Linux root (x86-64)' and of size 59 GiB.
+/dev/vdb5: Done.
+
+New situation:
+Disklabel type: gpt
+Disk identifier: C22FB213-ABDB-46BB-A71A-67A13B56DEC4
+
+Device       Start       End   Sectors  Size Type
+/dev/vdb1     2048      4095      2048    1M BIOS boot
+/dev/vdb2     4096   1052671   1048576  512M EFI System
+/dev/vdb3  1052672   2097151   1044480  510M Linux filesystem
+/dev/vdb4  2097152 125827071 123729920   59G Linux root (x86-64)
+
+The partition table has been altered.
+Calling ioctl() to re-read partition table.
+Syncing disks.
+Initializing LUKS for root
+Enrolling root device with TPM
+> systemd-cryptenroll --wipe-slot=all --tpm2-device=auto --unlock-key-file /tmp/.tmpLHM5FF /dev/vdb4
+New TPM2 token enrolled as key slot 1.
+Wiped slot 0.
+Opening root LUKS device
+Creating boot filesystem (xfs) on device /dev/vdb3 (size=534.8 MB)
+> mkfs.xfs -f -m uuid=43c6f947-d959-45e3-80ca-e6f87f37b4bc -L boot /dev/vdb3
+Creating root filesystem (xfs) on device /dev/mapper/root (size=63.3 GB)
+> mkfs.xfs -f -m uuid=570a0485-a0b8-4a90-8503-e4b26ed69872 -L root /dev/mapper/root
+Creating ESP filesystem
+> mkfs.fat /dev/vdb2 -n EFI-SYSTEM
+Initializing ostree layout
+layers already present: 0; layers needed: 265 (7.5 GB)
+Deploying container image...done (30 seconds)
+Injected: etc/tmpfiles.d/bootc-root-ssh.conf
+Bootloader: grub
+Installing bootloader via bootupd
+Executing: "efibootmgr" "-b" "0003" "-B"
+BootCurrent: 0003
+Timeout: 0 seconds
+BootOrder: 0002,0000,0001
+Boot0000* BootManagerMenuApp	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(eec25bdc-67f2-4d95-b1d5-f81b2039d11d)
+Boot0001* EFI Firmware Setup	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(462caa21-7614-4503-836e-8ab6f4662331)
+Boot0002* UEFI Misc Device	PciRoot(0x0)/Pci(0x3,0x0){auto_created_boot_option}
+Executing: "efibootmgr" "--create" "--disk" "/dev/vdb" "--part" "2" "--loader" "\\EFI\\fedora\\shimx64.efi" "--label" "Fedora"
+BootCurrent: 0003
+Timeout: 0 seconds
+BootOrder: 0003,0002,0000,0001
+Boot0000* BootManagerMenuApp	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(eec25bdc-67f2-4d95-b1d5-f81b2039d11d)
+Boot0001* EFI Firmware Setup	FvVol(7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1)/FvFile(462caa21-7614-4503-836e-8ab6f4662331)
+Boot0002* UEFI Misc Device	PciRoot(0x0)/Pci(0x3,0x0){auto_created_boot_option}
+Boot0003* Fedora	HD(2,GPT,89f94d70-0ca3-43d6-84ab-6174a7919f91,0x1000,0x100000)/\EFI\fedora\shimx64.efi
+Added 01_users.cfg
+Added 10_blscfg.cfg
+Added 14_menu_show_once.cfg
+Added 30_uefi-firmware.cfg
+Added 41_custom.cfg
+Installed: grub.cfg
+Installed: bootuuid.cfg
+Installed: "EFI/fedora/grub.cfg"
+Installed: "EFI/fedora/bootuuid.cfg"
+Trimming root
+Finalizing filesystem root
+Trimming boot
+boot: 510 MiB (534773760 bytes) trimmed
+Finalizing filesystem boot
+Unmounting filesystems
+Closing root LUKS device
+Installation complete!
+LUKS partition: /dev/vdb4
+Automatically discovered security TPM2 token unlocks volume.
+A secret recovery key has been generated for this volume:
+
+    🔐 
+Please save this secret recovery key at a secure location. It may be used to
+regain access to the volume if the other configured access credentials have
+been lost or forgotten. The recovery key may be entered in place of a password
+whenever authentication is requested.
+New recovery key enrolled as key slot 0.
+recovery key enrolled (in /home/timuri/.cache/mauvely-os/p5/machine/recovery-key.txt)
+./p5-install.sh localhost/mauvely-os:p5-ssh  0.03s user 0.02s system 0% cpu 2:20.95 total

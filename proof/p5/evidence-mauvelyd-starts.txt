@@ -1,0 +1,15 @@
+P5: mauvelyd on the installed machine, under its own unit. The four "skipped" lines are four boots with no
+/etc/mauvely/server (the unit's ConditionPathExists, which is the correct state until the installer writes it).
+Then the file was written by hand, the unit started (the binary runs on Kinoite's glibc and under the unit's
+sandbox), it said it was not enrolled because /etc/mauvely/enrol was absent, and the file was removed again.
+
+active
+mauvelyd.service - Mauvely device agent skipped, unmet condition check ConditionPathExists=/etc/mauvely/server
+mauvelyd.service - Mauvely device agent skipped, unmet condition check ConditionPathExists=/etc/mauvely/server
+mauvelyd.service - Mauvely device agent skipped, unmet condition check ConditionPathExists=/etc/mauvely/server
+mauvelyd.service - Mauvely device agent skipped, unmet condition check ConditionPathExists=/etc/mauvely/server
+Starting mauvelyd.service - Mauvely device agent...
+Started mauvelyd.service - Mauvely device agent.
+mauvelyd 0.1.0 starting
+not enrolled, and no token in /etc/mauvely/enrol
+inactive

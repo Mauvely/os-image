@@ -1,0 +1,18 @@
+P5: the final image, localhost/mauvely-os:p5 (id 1811debea892), linted again after the build with: podman run --rm localhost/mauvely-os:p5 bootc container lint
+
+Checks passed: 14
+Checks skipped: 1
+
+-- and the last steps of the first build that ran it, rootless podman 6.1.3 via scripts/build.sh (before 50-mauvely.toml gained its block line):
+Created symlink '/etc/systemd/system/bootc-fetch-apply-updates.service' → '/dev/null'.
+Created symlink '/etc/systemd/system/rpm-ostreed-automatic.timer' → '/dev/null'.
+Created symlink '/etc/systemd/system/rpm-ostreed-automatic.service' → '/dev/null'.
+Created symlink '/etc/systemd/system/flatpak-add-fedora-repos.service' → '/dev/null'.
+--> f13cd5ef17f9
+[2/2] STEP 9/9: RUN bootc container lint
+Checks passed: 14
+Checks skipped: 1
+[2/2] COMMIT localhost/mauvely-os:p5
+--> 55c9614a8547
+Successfully tagged localhost/mauvely-os:p5
+55c9614a85479bac012a4a654e43bab36376ce1ae78a1a941519ac5de1d90c48

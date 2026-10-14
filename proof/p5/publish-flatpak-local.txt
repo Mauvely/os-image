@@ -1,0 +1,52 @@
+gpg: checking the trustdb
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   1  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 1u
+throwaway key: 2FF5C48C4EDDA2005EA1395E4953C256BDE82817
+== publish, twice (the second run must change nothing)
+== compose
+/home/timuri/.cache/mauvely-os/p5/publish-test/work/dl/MauvelyCompose-0.5.3-linux-x86_64.flatpak: OK
+Importing app/net.mauvely.compose.app/x86_64/master (fd4f4ea952439f1e60895207382567b92e694e1f1211da0d33d3dac144880c84)
+app/net.mauvely.compose.app/x86_64/stable: 78ef9012996b05e035044c2d6fc0c8058a976472763c1e14930d3ea8f9434e36
+== sotto
+/home/timuri/.cache/mauvely-os/p5/publish-test/work/dl/MauvelySotto-0.1.0-linux-x86_64.flatpak: OK
+Importing app/net.mauvely.sotto.app/x86_64/master (b14611df3d19d3dacf5aab85ef797316be6e123b0318f57e66aa628e1dfbcc56)
+app/net.mauvely.sotto.app/x86_64/stable: 288bacd58339bf17db02243e6156284614aac01957055e3f18219a2ea4454c0d
+Updating appstream branch
+Generating static deltas
+Generating delta: app/net.mauvely.compose.app/x86_64/stable (78ef901299)
+Generating delta: app/net.mauvely.sotto.app/x86_64/stable (288bacd583)
+Generating delta: appstream2/x86_64 (12862c31e0)
+Updating summary
+Pruning old commits
+Total objects: 193
+Deleted 2 objects, 2.0 kB freed
+== refs in /home/timuri/.cache/mauvely-os/p5/publish-test/repo
+app/net.mauvely.compose.app/x86_64/stable
+app/net.mauvely.sotto.app/x86_64/stable
+appstream/x86_64
+appstream2/x86_64
+second run: 2 refs reported 'no change'
+== publish once more onto a copy holding only files, which is what a repo synced down from R2 is
+Deleted 2 objects, 2.0 kB freed
+== refs in /home/timuri/.cache/mauvely-os/p5/publish-test/r2repo
+app/net.mauvely.compose.app/x86_64/stable
+app/net.mauvely.sotto.app/x86_64/stable
+appstream/x86_64
+appstream2/x86_64
+== read it back as a client
+net.mauvely.compose.app	stable
+net.mauvely.sotto.app	stable
+            ID: net.mauvely.compose.app
+           Ref: app/net.mauvely.compose.app/x86_64/stable
+          Arch: x86_64
+        Branch: stable
+        Commit: 78ef9012996b05e035044c2d6fc0c8058a976472763c1e14930d3ea8f9434e36
+       Subject: net.mauvely.compose.app 0.5.3
+            ID: net.mauvely.sotto.app
+           Ref: app/net.mauvely.sotto.app/x86_64/stable
+          Arch: x86_64
+        Branch: stable
+        Commit: 288bacd58339bf17db02243e6156284614aac01957055e3f18219a2ea4454c0d
+       Subject: net.mauvely.sotto.app 0.1.0
+== a client holding the committed public key must refuse it (it is the wrong key)
+refused, as it should: Can't check signature: public key not found

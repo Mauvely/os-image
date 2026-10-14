@@ -1,0 +1,142 @@
+
+== first boot, before any reboot
+Wed Oct 14 02:04:43 AM UTC 2026
+7.2.9-201.fc44.x86_64
+luks.uuid=aa2cd662-42f2-451c-8fa9-6d4fc551ff1b
+luks.options=tpm2-device=auto,headless=true
+root=UUID=570a0485-a0b8-4a90-8503-e4b26ed69872
+
+== os-release
+NAME="Mauvely OS"
+VERSION="44.20261013.0 (Mauvely OS)"
+RELEASE_TYPE=stable
+ID=fedora
+VERSION_ID=44
+VERSION_CODENAME=""
+PRETTY_NAME="Mauvely OS (Fedora 44 base)"
+CPE_NAME="cpe:/o:fedoraproject:fedora:44"
+DEFAULT_HOSTNAME="fedora"
+REDHAT_BUGZILLA_PRODUCT="Fedora"
+REDHAT_BUGZILLA_PRODUCT_VERSION=44
+REDHAT_SUPPORT_PRODUCT="Fedora"
+REDHAT_SUPPORT_PRODUCT_VERSION=44
+SUPPORT_END=2027-05-19
+VARIANT="Mauvely OS"
+VARIANT_ID=mauvely
+OSTREE_VERSION='44.20261013.0'
+ANSI_COLOR="0;38;2;150;138;224"
+LOGO=mauvely-logo
+HOME_URL="https://mauvely.com"
+
+lrwxrwxrwx. 1 root root 21 Oct 14 02:02 /etc/os-release -> ../usr/lib/os-release
+ls: cannot access '/usr/lib/mauvely-release': No such file or directory
+
+== About page
+[General]
+LogoPath=/usr/share/pixmaps/mauvely-logo.png
+Website=https://mauvely.com
+-rw-r--r--. 1 root root 13807 Jan  1  1970 /usr/share/pixmaps/mauvely-logo.png
+
+== secure boot, disk
+SecureBoot enabled
+NAME                                          FSTYPE      FSVER LABEL      UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+vda                                                                                                                            
+├─vda1                                                                                                                         
+├─vda2                                        vfat        FAT32 EFI-SYSTEM 2593-862F                                           
+├─vda3                                        xfs               boot       43c6f947-d959-45e3-80ca-e6f87f37b4bc  154.8M    65% /boot
+└─vda4                                        crypto_LUKS 2                aa2cd662-42f2-451c-8fa9-6d4fc551ff1b                
+  └─luks-aa2cd662-42f2-451c-8fa9-6d4fc551ff1b xfs               root       570a0485-a0b8-4a90-8503-e4b26ed69872   50.7G    14% /var
+                                                                                                                               /sysroot/ostree/deploy/default/var
+                                                                                                                               /sysroot
+                                                                                                                               /etc
+xfs
+
+== mauvelyd: present and enabled, inactive without /etc/mauvely/server
+-rwxr-xr-x. 1 root root 2471528 Jan  1  1970 /usr/bin/mauvelyd
+mauvelyd 0.1.0
+enabled
+inactive
+ls: cannot access '/etc/mauvely': No such file or directory
+○ mauvelyd.service - Mauvely device agent
+     Loaded: loaded (/usr/lib/systemd/system/mauvelyd.service; enabled; preset: disabled)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: inactive (dead)
+
+== mauvely-seal
+enabled
+ActiveState=active
+Result=success
+ExecMainStatus=0
+Starting mauvely-seal.service - Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt)...
+mauvely-seal: TPM2 token on /dev/vda4 is bound to no PCRs; re-enrolling it on PCR 7
+Automatically discovered security TPM2 token unlocks volume.
+New TPM2 token enrolled as key slot 2.
+Wiped slot 1.
+mauvely-seal: dropping headless=true from luks.options (takes effect at the next boot)
+Staging deployment...done
+Changes queued for next boot. Run "systemctl reboot" to start a reboot
+Finished mauvely-seal.service - Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt).
+
+== LUKS tokens and slots
+device: /dev/vda4
+{"tokens":[{"type":"systemd-recovery","keyslots":["0"],"pcrs":null,"bank":null},{"type":"systemd-tpm2","keyslots":["2"],"pcrs":[7],"bank":"sha256"}],"keyslots":["0","2"]}
+SLOT TYPE
+   0 recovery
+   2 tpm2
+
+== the recovery slot still opens the volume
+recovery key: opens the volume
+
+== staged deployment (a kargs-only one is expected before the first reboot)
+{"booted":"registry.invalid/mauvely/os:p5","staged":"registry.invalid/mauvely/os:p5"}
+State: idle
+Deployments:
+  ostree-unverified-registry:registry.invalid/mauvely/os:p5
+                   Digest: sha256:e18b1d751fd371ccd79c52fe40c74f87b90f9e53077f154cce7478575c2cda77
+                  Version: 44.20261013.0 (2026-10-14T01:59:42Z)
+
+● ostree-unverified-registry:registry.invalid/mauvely/os:p5
+                   Digest: sha256:e18b1d751fd371ccd79c52fe40c74f87b90f9e53077f154cce7478575c2cda77
+                  Version: 44.20261013.0 (2026-10-14T01:59:42Z)
+
+== no Fedora Flatpak remotes
+
+remotes: 1
+/etc/flatpak/remotes.d:
+
+/usr/share/flatpak/remotes.d:
+ls: cannot access '/var/lib/flatpak/.fedora-initialized': No such file or directory
+masked
+
+== no update timers
+masked
+masked
+masked
+masked
+Wed 2026-10-14 06:40:10 UTC 4h 35min -         - rpm-ostree-countme.timer     rpm-ostree-countme.service
+
+== Firefox is gone
+package firefox is not installed
+package firefox-langpacks is not installed
+no firefox on PATH
+no firefox.desktop
+
+== Plasma Setup stays
+ls: cannot access '/etc/plasma-setup-done': No such file or directory
+enabled
+
+== dnf, flatpak, bootc see Fedora
+ID=fedora VERSION_ID=44
+Flatpak 1.18.4
+bootc 1.16.13
+44
+
+NOTE (added after the run): "remotes: 1" in the Flatpak section is the script's own miscount. `flatpak remotes`
+prints a single blank line when there are none, and `wc -l` counted it. The script now counts with `grep -c .`;
+evidence-after-reboot.txt shows "remotes: 0", and the blank line above it is the whole output.
+
+== systemctl restart mauvely-seal, same boot, run by hand after the script above (transcript of the terminal output)
+mauvely-seal: TPM2 token on /dev/vda4 already names PCRs
+mauvely-seal: a deployment is already staged; leaving luks.options=tpm2-device=auto,headless=true until the next boot
+Finished mauvely-seal.service - Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt).
