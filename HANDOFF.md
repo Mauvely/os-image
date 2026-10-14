@@ -246,12 +246,15 @@ once that is installed.
 - **T4's first publish**, steps 3 and 4 above: the dispatch, then the
   package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
-- Plan 20 (ids to `com.mauvely.<key>`) is in the apps' `main` since
-  2026-10-14, and website-devices' catalog moves with migration 0002. The
-  remote has never been published, so **run the first publish only after
-  Compose and Sotto have released with the new ids**: the script reads the id
-  from the bundle, and a bundle from an older release would put an
-  `app/net.mauvely.*` ref in the remote that no device is told to install.
+- **Nothing builds a Flatpak any more, so the first publish has nothing new to
+  publish.** The apps' release workflows dropped their Flatpak lane on
+  2026-09-12 (Compose `31a47e5`: the self-hosted runners cannot give bwrap a
+  user namespace). The feed's newest `flatpak` items are Compose 0.5.3 and
+  Sotto 0.1.0, under the old `net.mauvely.*.app` ids, while plan 20 moved the
+  apps and website-devices' catalog (0002) to `com.mauvely.<key>` on
+  2026-10-14. Published now, the remote would hold refs no device is told to
+  install. **Do not dispatch `publish-flatpak.yml` until a Flatpak is built
+  again under the new ids**; where it is built is Timur's call.
 
 ## Tried and rejected
 
