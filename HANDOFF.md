@@ -2,8 +2,11 @@
 
 P5 of brief 19 ran on 2026-10-14: the real image, the build CI and the Flatpak
 publishing. The image was built, installed to a blank disk under Secure Boot and
-a TPM, rebooted and checked. **Neither workflow has run on GitHub**, and nothing
-was published or pushed to any registry.
+a TPM, rebooted and checked. `build.yml` has run once on GitHub, on the push of
+this work: with no `OS_AGENT_TOKEN` it took 6 s, wrote the warning and the summary,
+and ended green (run 38500193127). **The build itself has never run there**, the
+publish workflow has never run at all, and nothing was published or pushed to any
+registry.
 
 ## What is here
 
@@ -138,9 +141,10 @@ once that is installed.
 
 ## Never run, or not for real
 
-- **Neither workflow has run on GitHub.** Untested there: rootless podman on
-  `ubuntu-latest` (user namespaces, podman 4.9's `--build-context`), the disk
-  reclaim, build time, and for the publish workflow `apt install flatpak ostree`
+- **Neither workflow has done its real work on GitHub.** Untested there: rootless
+  podman on `ubuntu-latest` (user namespaces, podman 4.9's `--build-context`, and
+  the label moves to Ubuntu 26 on 2026-10-19), the disk reclaim, build time, and
+  for the publish workflow `apt install flatpak ostree`
   (Ubuntu's Flatpak is 1.14, the local tests used 1.18.4), the `aws` CLI against R2
   and the upload order. The key import was tried with a throwaway key only: the
   refusal paths work, and **the real key's success path has never run**.
