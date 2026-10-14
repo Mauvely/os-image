@@ -49,7 +49,7 @@ That is why `publish-image.yml` pins cosign v2.
 ## What this did not show
 
 - **GHCR itself**, the real key and Rekor. The first `publish-image.yml` run is
-  the first time any of the three is involved.
+  the first time any of the three is involved. See "On GHCR" below.
 - **A changed `/etc/containers/policy.json`.** After the reboot the VM still
   held its own edited file, not the new image's. This is ostree's `/etc` merge:
   a file changed locally is kept whole. A device whose policy file someone
@@ -58,3 +58,40 @@ That is why `publish-image.yml` pins cosign v2.
   the break-glass account could cause this (M2).
 - **`mauvelyd` itself.** It was not run here. The agent's change is one argv,
   `bootc upgrade`, and is unit-tested in os-agent.
+
+## On GHCR, 2026-10-14 afternoon
+
+`publish-image.yml` `next` (run 38567573684) pushed and signed
+`ghcr.io/mauvely/os:next`, digest `sha256:ccf06254…7e88`, with the real key
+(Rekor entry 3250603642). Its own pull-back through the image's policy passed.
+After that, Timur made the package public.
+
+**The device side**, through staging, with nothing local but the VM:
+
+- **The VM** was a fresh overlay of P5's installed disk, its own copy of the TPM
+  state and OVMF vars, booted on `registry.invalid/mauvely/os:p5`.
+  - One local addition: a `graphical.target.wants/sshd.service` link in
+    `/etc`, so the VM could still be reached after the switch. ostree keeps a
+    local addition; the GHCR image does not enable sshd.
+- **website-devices staging** had `OS_IMAGE_REPO = ghcr.io/mauvely/os`.
+  - In the test org on enterprise.mauvely.dev, a collection on `Next` with a
+    1-minute check-in, and a single-use token for it.
+- **`/etc/mauvely/server`** was `https://devices.mauvely.dev`. It was the first
+  time the agent talked HTTPS to a real host; its roots are built in
+  (`webpki-roots`).
+
+| Time (UTC) | What happened |
+|---|---|
+| 13:20:59 | `mauvelyd` (P5's, `69ca2d0`) enrolled into the org, and was told `ghcr.io/mauvely/os:next` |
+| 13:21:00 | `bootc switch`: 257 layers already present, 9 needed (36 MB) |
+| 13:21:41 | staged `sha256:ccf06254…7e88`, the digest the publish signed |
+| reboot | booted `ghcr.io/mauvely/os:next` at that digest. The disk unlocked with no prompt. `Mauvely OS (Fedora 44 base)`. `policy.json` holds the `sigstoreSigned` rule, and `/etc/pki/containers/mauvely-os.pub` hashes to `keys/cosign.pub`'s sha256 |
+| 13:22:12 | the new `mauvelyd` (`09b2536`) checked in, and ran `bootc upgrade` each minute after: nothing new, nothing staged |
+| 13:23 | the console's device page showed the image `ghcr.io/mauvely/os:next`, the same digest, Secure Boot and TPM |
+
+**The first switch was not checked.** P5's image has no rule for GHCR, so it
+pulled under accept-anything. That is true of every machine from before T4.
+
+**Not yet shown:** a device staging a newer `next`. That is the first time a
+device checks the real key's signature itself. It waits for a second
+dispatch.

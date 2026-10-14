@@ -59,9 +59,8 @@ the lint: run 38566709935, 5 minutes, green.
   workflow pins v2.
 
 **Never run:**
-- **`publish-image.yml` on GitHub:** GHCR, the real key, Rekor, podman 4.9's
-  `--digestfile`, skopeo 1.13's `--preserve-digests` and global
-  `--registries.d`. It passes actionlint and shellcheck, nothing more.
+- **`publish-image.yml` with `stable`:** skopeo 1.13's `--preserve-digests`
+  and `cosign verify` against GHCR. `next` has run (below).
 - **`/etc` keeps a locally edited `policy.json` whole** across updates
   (`proof/t4/`). A future key rotation reaches only devices whose file is
   untouched.
@@ -71,15 +70,17 @@ the lint: run 38566709935, 5 minutes, green.
 **The first publish, in order:**
 1. ~~The key pair~~, done 2026-10-14.
 2. ~~os-agent and os-image public~~, done 2026-10-14.
-3. Dispatch `publish-image.yml` with `next`.
-4. Make the GHCR package `mauvely/os` public. A package's first push creates
-   it private.
-5. Set website-devices' `OS_IMAGE_REPO` to `ghcr.io/mauvely/os`, on staging
-   first.
-6. Check in a VM: a machine on `next` switches to it, and later upgrades.
-   Then dispatch `stable`.
-7. The installer's target ref is os-installer's change: it becomes
-   `ghcr.io/mauvely/os:stable`.
+3. ~~Dispatch `publish-image.yml` with `next`~~: run 38567573684, green.
+   `ghcr.io/mauvely/os:next` is `sha256:ccf06254…7e88`, signed (Rekor entry
+   3250603642), and the run's pull-back through the image's own policy passed.
+4. ~~Make the GHCR package public~~: done; an anonymous manifest read answers 200.
+5. ~~website-devices' `OS_IMAGE_REPO`~~ is `ghcr.io/mauvely/os`, on staging
+   and production (website-devices `3a89f2c`).
+6. **Half done.** A VM enrolled against staging switched to `next` and booted
+   it (`proof/t4/`, "On GHCR"). The upgrade to a newer `next` waits for a
+   second dispatch. Then `stable`.
+7. ~~The installer's target ref~~: `ghcr.io/mauvely/os:stable`, os-installer
+   `7218b1b`. `:stable` does not exist until step 6's dispatch.
 
 The machines from P5–P7 report `registry.invalid/…`. Their first switch to
 GHCR pulls without a check, because their own image has no policy yet.
