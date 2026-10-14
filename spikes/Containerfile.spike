@@ -1,0 +1,5 @@
+# Spike-only layer on top of the real image: turn sshd on so the S2 checks can
+# run inside the installed machine. The key is not in here; it is injected at
+# install time with `bootc install --root-ssh-authorized-keys`.
+FROM localhost/mauvely-os:spike
+RUN systemctl enable sshd && bootc container lint

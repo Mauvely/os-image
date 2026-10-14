@@ -1,0 +1,62 @@
+# S2 evidence, collected inside the installed machine (booted from the target disk alone)
+## uname / image
+7.2.9-201.fc44.x86_64
+NAME="Mauvely OS"
+SPIKE=P1
+bootc 1.16.13
+apiVersion: org.containers.bootc/v1
+  image:
+    image: registry.invalid/mauvely/os:spike
+    image:
+## secure boot
+SecureBoot enabled
+   Secure Boot: enabled (user)
+  TPM2 Support: yes
+## lsblk
+NAME                                           SIZE FSTYPE      MOUNTPOINTS
+sr0                                           1024M             
+zram0                                          7.7G swap        [SWAP]
+vda                                             60G             
+├─vda1                                           1M             
+├─vda2                                         512M vfat        
+├─vda3                                         510M xfs         /boot
+└─vda4                                          59G crypto_LUKS 
+  └─luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34   59G xfs         /var
+                                                                /sysroot/ostree/deploy/default/var
+                                                                /sysroot
+                                                                /etc
+## luks
+/dev/mapper/luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34 is active and is in use.
+  type:    LUKS2
+  cipher:  aes-xts-plain64
+  keysize: 512 [bits]
+  key location: keyring
+  device:  /dev/vda4
+  sector size:  512 [bytes]
+  offset:  32768 [512-byte units] (16777216 [bytes])
+## enrolled keyslots
+SLOT TYPE
+   0 recovery
+   2 tpm2
+## tpm2 token (blob omitted)
+{'type': 'systemd-recovery', 'keyslots': ['0']}
+## cmdline
+BOOT_IMAGE=(hd0,gpt3)/boot/ostree/default-20c3e19bd33b41c7b5059b0bda008c6689b4b2581da844b0686d9c4b8eeb82b0/vmlinuz-7.2.9-201.fc44.x86_64
+luks.uuid=f4a0fe9f-5803-46ab-b905-1b85a7788e34
+luks.options=tpm2-device=auto,headless=true
+root=UUID=d5700437-3bed-44b4-a0e0-52d9b5d4a42c
+ostree=/ostree/boot.1/default/20c3e19bd33b41c7b5059b0bda008c6689b4b2581da844b0686d9c4b8eeb82b0/0
+## unlock log (no passphrase)
+Starting systemd-cryptsetup@luks\x2df4a0fe9f\x2d5803\x2d46ab\x2db905\x2d1b85a7788e34.service - Cryptography Setup for luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34...
+Finished systemd-cryptsetup@luks\x2df4a0fe9f\x2d5803\x2d46ab\x2db905\x2d1b85a7788e34.service - Cryptography Setup for luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34.
+## pcr7
+NR NAME               SHA256
+ 7 secure-boot-policy 09a4d8f2dca86e30f138ee48b8fa81d4bfa03b921b10808a7ccf6d56d3ad6f4a
+## versions
+systemd-259.9-1.fc44.x86_64
+cryptsetup-2.8.8-1.fc44.x86_64
+kernel-7.2.9-201.fc44.x86_64
+plasma-login-manager-6.7.5-1.fc44.x86_64
+plasma-setup-6.7.5-1.fc44.x86_64
+openssh-server-10.2p1-14.fc44.x86_64
+flatpak-1.18.4-1.fc44.x86_64
