@@ -1,21 +1,24 @@
-# S2 evidence, collected inside the installed machine (booted from the target disk alone)
-## uname / image
-7.2.9-201.fc44.x86_64
+# S2 evidence, from inside the installed machine (target disk booted alone: same OVMF vars, same swtpm)
+## release
 NAME="Mauvely OS"
 SPIKE=P1
+7.2.9-201.fc44.x86_64
+systemd-259.9-1.fc44.x86_64
+cryptsetup-2.8.8-1.fc44.x86_64
+plasma-login-manager-6.7.5-1.fc44.x86_64
+plasma-setup-6.7.5-1.fc44.x86_64
+flatpak-1.18.4-1.fc44.x86_64
 bootc 1.16.13
-apiVersion: org.containers.bootc/v1
-  image:
-    image: registry.invalid/mauvely/os:spike
-    image:
+## booted image
+● Booted image: registry.invalid/mauvely/os:spike
+        Digest: sha256:5f65fa2c37a161337b6e7753b238ae15258db0de004c321af37883d5d2dffa9b (amd64)
+       Version: 44.20261013.0 (2026-10-13T23:51:42Z)
 ## secure boot
 SecureBoot enabled
    Secure Boot: enabled (user)
   TPM2 Support: yes
-## lsblk
+## block devices
 NAME                                           SIZE FSTYPE      MOUNTPOINTS
-sr0                                           1024M             
-zram0                                          7.7G swap        [SWAP]
 vda                                             60G             
 ├─vda1                                           1M             
 ├─vda2                                         512M vfat        
@@ -31,32 +34,17 @@ vda                                             60G
   cipher:  aes-xts-plain64
   keysize: 512 [bits]
   key location: keyring
-  device:  /dev/vda4
-  sector size:  512 [bytes]
-  offset:  32768 [512-byte units] (16777216 [bytes])
-## enrolled keyslots
+## keyslots
 SLOT TYPE
    0 recovery
    2 tpm2
-## tpm2 token (blob omitted)
+## tpm2 token
 {'type': 'systemd-recovery', 'keyslots': ['0']}
-## cmdline
-BOOT_IMAGE=(hd0,gpt3)/boot/ostree/default-20c3e19bd33b41c7b5059b0bda008c6689b4b2581da844b0686d9c4b8eeb82b0/vmlinuz-7.2.9-201.fc44.x86_64
+{'type': 'systemd-tpm2', 'keyslots': ['2'], 'tpm2-blob': '<omitted>', 'tpm2-pcrs': [7], 'tpm2-pcr-bank': 'sha256', 'tpm2-primary-alg': 'ecc', 'tpm2-policy-hash': '6348d6ff4a6f3e4f8ce938d7b895be36b42953945243c94c8f3bfe346
+## kernel arguments
 luks.uuid=f4a0fe9f-5803-46ab-b905-1b85a7788e34
-luks.options=tpm2-device=auto,headless=true
-root=UUID=d5700437-3bed-44b4-a0e0-52d9b5d4a42c
-ostree=/ostree/boot.1/default/20c3e19bd33b41c7b5059b0bda008c6689b4b2581da844b0686d9c4b8eeb82b0/0
-## unlock log (no passphrase)
-Starting systemd-cryptsetup@luks\x2df4a0fe9f\x2d5803\x2d46ab\x2db905\x2d1b85a7788e34.service - Cryptography Setup for luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34...
-Finished systemd-cryptsetup@luks\x2df4a0fe9f\x2d5803\x2d46ab\x2db905\x2d1b85a7788e34.service - Cryptography Setup for luks-f4a0fe9f-5803-46ab-b905-1b85a7788e34.
-## pcr7
-NR NAME               SHA256
- 7 secure-boot-policy 09a4d8f2dca86e30f138ee48b8fa81d4bfa03b921b10808a7ccf6d56d3ad6f4a
-## versions
-systemd-259.9-1.fc44.x86_64
-cryptsetup-2.8.8-1.fc44.x86_64
-kernel-7.2.9-201.fc44.x86_64
-plasma-login-manager-6.7.5-1.fc44.x86_64
-plasma-setup-6.7.5-1.fc44.x86_64
-openssh-server-10.2p1-14.fc44.x86_64
-flatpak-1.18.4-1.fc44.x86_64
+luks.options=tpm2-device=auto
+## unlock: the journal records no passphrase prompt
+0
+## login manager
+active

@@ -26,7 +26,7 @@ common=(
   -name "mauvely-os-$role" -machine q35,smm=on,accel=kvm -cpu host -smp 4 -m 8G
   -global driver=cfi.pflash01,property=secure,value=on
   -drive "if=pflash,format=raw,unit=0,file=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd,readonly=on"
-  -drive "if=pflash,format=raw,unit=1,file=$M/OVMF_VARS.secboot.fd"
+  -drive "if=pflash,format=raw,unit=1,file=${VARS:-$M/OVMF_VARS.secboot.fd}"
   -chardev "socket,id=chrtpm,path=$M/swtpm.sock" -tpmdev emulator,id=tpm0,chardev=chrtpm
   -device tpm-crb,tpmdev=tpm0
   -device VGA -display none -serial "file:$M/serial-$role.log"
