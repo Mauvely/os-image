@@ -239,11 +239,10 @@ once that is installed.
 
 ## Waiting for Timur
 
-- **R2 secrets for the publish workflow:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-  `R2_SECRET_ACCESS_KEY` (an R2 API token with Object Read & Write on
-  `mauvely-flatpak`). `FLATPAK_GPG_KEY` exists already. With any missing, the run
-  says which and ends green. Also the `flatpak.mauvely.com` custom domain on the
-  bucket, serving `/repo/…`.
+- ~~**R2 secrets and the domain.**~~ Done 2026-10-14: all four secrets are
+  set, and `flatpak.mauvely.com` is the bucket's custom domain.
+  `/repo/config` answers R2's own 404, "Object not found", until the first
+  publish. **The publish itself waits for plan 20's releases** (below).
 - **T4's first publish**, steps 3 and 4 above: the dispatch, then the
   package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
