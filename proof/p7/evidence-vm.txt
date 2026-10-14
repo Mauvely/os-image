@@ -1,0 +1,106 @@
+== the installed machine, after the run
+Wed Oct 14 03:17:01 UTC 2026
+
+== os-release
+NAME="Mauvely OS"
+PRETTY_NAME="Mauvely OS (Fedora 44 base)"
+
+== secure boot and LUKS
+SecureBoot enabled
+SLOT TYPE
+   0 recovery
+   2 tpm2
+
+== /etc/mauvely (enrol is gone: the agent deletes it after enrolling)
+total 4
+-rw-r--r--. 1 root root system_u:object_r:etc_t:s0 21 Oct 14 03:07 server
+
+== /var/lib/mauvely
+total 16
+-rw-------. 1 root root  78 Oct 14 03:10 device.json
+-rw-------. 1 root root 584 Oct 14 03:10 key.cred
+-rw-------. 1 root root 638 Oct 14 03:14 managed.json
+-rw-------. 1 root root  33 Oct 14 03:14 status.json
+
+== flatpak remotes (system)
+flathub	https://dl.flathub.org/repo/
+mauvely	http://10.0.2.2:8120/repo
+
+[remote "mauvely"]
+gpg-verify=true
+gpg-verify-summary=true
+url=http://10.0.2.2:8120/repo
+xa.default-branch=stable
+
+== flatpak apps (system), after Chromium was unassigned
+net.mauvely.compose.app	mauvely	stable	0.5.3
+org.mozilla.firefox	flathub	stable	158.0
+org.onlyoffice.desktopeditors	flathub	stable	9.4.0
+
+== mauvely-seal and mauvelyd, this boot (flatpak transfer detail dropped)
+2026-10-14T03:10:11+00:00 fedora systemd[1]: Starting mauvely-seal.service - Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt)...
+2026-10-14T03:10:11+00:00 fedora seal[794]: mauvely-seal: TPM2 token on /dev/vda4 is bound to no PCRs; re-enrolling it on PCR 7
+2026-10-14T03:10:11+00:00 fedora systemd-cryptenroll[848]: Automatically discovered security TPM2 token unlocks volume.
+2026-10-14T03:10:12+00:00 fedora systemd-cryptenroll[848]: New TPM2 token enrolled as key slot 2.
+2026-10-14T03:10:12+00:00 fedora systemd-cryptenroll[848]: Wiped slot 1.
+2026-10-14T03:10:12+00:00 fedora seal[794]: mauvely-seal: dropping headless=true from luks.options (takes effect at the next boot)
+2026-10-14T03:10:32+00:00 fedora seal[1132]: Staging deployment...done
+2026-10-14T03:10:34+00:00 fedora seal[1132]: Changes queued for next boot. Run "systemctl reboot" to start a reboot
+2026-10-14T03:10:34+00:00 fedora systemd[1]: Finished mauvely-seal.service - Mauvely OS disk seal (TPM2 on PCR 7, recovery prompt).
+2026-10-14T03:10:34+00:00 fedora systemd[1]: Starting mauvelyd.service - Mauvely device agent...
+2026-10-14T03:10:34+00:00 fedora systemd[1]: Started mauvelyd.service - Mauvely device agent.
+2026-10-14T03:10:34+00:00 fedora mauvelyd[2504]: mauvelyd 0.1.0 starting
+2026-10-14T03:10:34+00:00 fedora mauvelyd[2504]: device dev_6acef2aa358ded5988e125c3 in officedemo, checking in
+2026-10-14T03:10:34+00:00 fedora flatpak[2547]: system: Added remote flathub to https://dl.flathub.org/repo/
+2026-10-14T03:10:34+00:00 fedora flatpak[2547]: system: Modified remote flathub to https://dl.flathub.org/repo/
+2026-10-14T03:10:35+00:00 fedora flatpak[2594]: system: Added remote mauvely to http://10.0.2.2:8120/repo
+2026-10-14T03:10:35+00:00 fedora flatpak[2594]: system: Modified remote mauvely to http://10.0.2.2:8120/repo
+2026-10-14T03:10:36+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.freedesktop.Platform.GL.default/x86_64/25.08 complete
+2026-10-14T03:10:36+00:00 fedora flatpak[2637]: system: Pulled runtime/org.freedesktop.Platform.GL.default/x86_64/25.08 from flathub
+2026-10-14T03:10:36+00:00 fedora flatpak[2637]: system: Installed runtime/org.freedesktop.Platform.GL.default/x86_64/25.08 from flathub
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.freedesktop.Platform.GL.default/x86_64/25.08-extra complete
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: system: Pulled runtime/org.freedesktop.Platform.GL.default/x86_64/25.08-extra from flathub
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: system: Installed runtime/org.freedesktop.Platform.GL.default/x86_64/25.08-extra from flathub
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.freedesktop.Platform.codecs-extra/x86_64/25.08-extra complete
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: system: Pulled runtime/org.freedesktop.Platform.codecs-extra/x86_64/25.08-extra from flathub
+2026-10-14T03:10:37+00:00 fedora flatpak[2637]: system: Installed runtime/org.freedesktop.Platform.codecs-extra/x86_64/25.08-extra from flathub
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.kde.KStyle.Adwaita/x86_64/6.11 complete
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: system: Pulled runtime/org.kde.KStyle.Adwaita/x86_64/6.11 from flathub
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: system: Installed runtime/org.kde.KStyle.Adwaita/x86_64/6.11 from flathub
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.kde.Platform.Locale/x86_64/6.11 complete
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: system: Pulled runtime/org.kde.Platform.Locale/x86_64/6.11 from flathub
+2026-10-14T03:10:38+00:00 fedora flatpak[2637]: system: Installed runtime/org.kde.Platform.Locale/x86_64/6.11 from flathub
+2026-10-14T03:10:44+00:00 fedora flatpak[2637]: libostree pull from 'flathub' for runtime/org.kde.Platform/x86_64/6.11 complete
+2026-10-14T03:10:45+00:00 fedora flatpak[2637]: system: Pulled runtime/org.kde.Platform/x86_64/6.11 from flathub
+2026-10-14T03:10:46+00:00 fedora flatpak[2637]: system: Installed runtime/org.kde.Platform/x86_64/6.11 from flathub
+2026-10-14T03:10:46+00:00 fedora flatpak[2637]: libostree pull from 'mauvely' for app/net.mauvely.compose.app/x86_64/stable complete
+2026-10-14T03:10:46+00:00 fedora flatpak[2637]: system: Pulled app/net.mauvely.compose.app/x86_64/stable from mauvely
+2026-10-14T03:10:46+00:00 fedora flatpak[2637]: system: Installed app/net.mauvely.compose.app/x86_64/stable from mauvely
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: libostree pull from 'flathub' for runtime/org.chromium.Chromium.Codecs/x86_64/stable complete
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Pulled runtime/org.chromium.Chromium.Codecs/x86_64/stable from flathub
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Installed runtime/org.chromium.Chromium.Codecs/x86_64/stable from flathub
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: libostree pull from 'flathub' for runtime/org.chromium.Chromium.Locale/x86_64/stable complete
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Pulled runtime/org.chromium.Chromium.Locale/x86_64/stable from flathub
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Installed runtime/org.chromium.Chromium.Locale/x86_64/stable from flathub
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: libostree pull from 'flathub' for runtime/org.freedesktop.Platform.Locale/x86_64/25.08 complete
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Pulled runtime/org.freedesktop.Platform.Locale/x86_64/25.08 from flathub
+2026-10-14T03:10:47+00:00 fedora flatpak[4182]: system: Installed runtime/org.freedesktop.Platform.Locale/x86_64/25.08 from flathub
+2026-10-14T03:10:50+00:00 fedora flatpak[4182]: libostree pull from 'flathub' for runtime/org.freedesktop.Platform/x86_64/25.08 complete
+2026-10-14T03:10:50+00:00 fedora flatpak[4182]: system: Pulled runtime/org.freedesktop.Platform/x86_64/25.08 from flathub
+2026-10-14T03:10:51+00:00 fedora flatpak[4182]: system: Installed runtime/org.freedesktop.Platform/x86_64/25.08 from flathub
+2026-10-14T03:10:53+00:00 fedora flatpak[4182]: libostree pull from 'flathub' for app/org.chromium.Chromium/x86_64/stable complete
+2026-10-14T03:10:54+00:00 fedora flatpak[4182]: system: Pulled app/org.chromium.Chromium/x86_64/stable from flathub
+2026-10-14T03:10:54+00:00 fedora flatpak[4182]: system: Installed app/org.chromium.Chromium/x86_64/stable from flathub
+2026-10-14T03:10:54+00:00 fedora flatpak[4274]: libostree pull from 'flathub' for runtime/org.mozilla.firefox.Locale/x86_64/stable complete
+2026-10-14T03:10:54+00:00 fedora flatpak[4274]: system: Pulled runtime/org.mozilla.firefox.Locale/x86_64/stable from flathub
+2026-10-14T03:10:54+00:00 fedora flatpak[4274]: system: Installed runtime/org.mozilla.firefox.Locale/x86_64/stable from flathub
+2026-10-14T03:10:55+00:00 fedora flatpak[4274]: libostree pull from 'flathub' for app/org.mozilla.firefox/x86_64/stable complete
+2026-10-14T03:10:56+00:00 fedora flatpak[4274]: system: Pulled app/org.mozilla.firefox/x86_64/stable from flathub
+2026-10-14T03:10:56+00:00 fedora flatpak[4274]: system: Installed app/org.mozilla.firefox/x86_64/stable from flathub
+2026-10-14T03:11:03+00:00 fedora flatpak[4316]: libostree pull from 'flathub' for app/org.onlyoffice.desktopeditors/x86_64/stable complete
+2026-10-14T03:11:03+00:00 fedora flatpak[4316]: system: Pulled app/org.onlyoffice.desktopeditors/x86_64/stable from flathub
+2026-10-14T03:11:03+00:00 fedora flatpak[4316]: system: Installed app/org.onlyoffice.desktopeditors/x86_64/stable from flathub
+2026-10-14T03:12:09+00:00 fedora flatpak[4604]: system: Uninstalled app/org.chromium.Chromium/x86_64/stable
+2026-10-14T03:12:09+00:00 fedora flatpak[4604]: system: Uninstalled runtime/org.chromium.Chromium.Codecs/x86_64/stable
+2026-10-14T03:12:09+00:00 fedora flatpak[4604]: system: Uninstalled runtime/org.chromium.Chromium.Locale/x86_64/stable
+2026-10-14T03:15:10+00:00 fedora mauvelyd[2504]: this device has been revoked; no longer checking in

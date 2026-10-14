@@ -1,0 +1,198 @@
+== website-devices (wrangler dev, 8798): the agent's requests, in order
+POST /api/agent/v1/enrol 201 Created
+POST /api/agent/v1/checkin 200 OK
+POST /api/agent/v1/checkin 200 OK
+POST /api/agent/v1/checkin 200 OK
+POST /api/agent/v1/checkin 200 OK
+POST /api/agent/v1/checkin 403 Forbidden
+
+Times (UTC), from the VM's journal and the console calls:
+  03:10:34  enrolled; first check-in; four apps installing
+  03:11:03  Compose, Chromium, Firefox and ONLYOFFICE installed (Compose first, at 03:10:46)
+  03:11:24  Chromium unassigned from Office Machines (DELETE /collections/<id>/apps/org.chromium.Chromium)
+  03:12:09  Chromium uninstalled, on the next check-in
+  03:14:47  device revoked (POST /devices/<id>/revoke)
+  03:15:10  check-in answered 403 revoked; the agent stops checking in
+
+== console API, through website-enterprise's forwarder (8791): GET /devices/dev_6acef2aa358ded5988e125c3, after the revoke
+{
+    "id": "dev_6acef2aa358ded5988e125c3",
+    "collection_id": "col_6acef0df60f174a87592baca",
+    "name": null,
+    "hostname": "fedora",
+    "serial": null,
+    "booted_image": "registry.invalid/mauvely/os:stable",
+    "booted_digest": "sha256:f99196cac131cf0a72f210115c3b7248c4288258ee69f5cc09032515096737a7",
+    "agent_version": "0.1.0",
+    "state": "revoked",
+    "enrolled_at": 1791947434,
+    "last_seen_at": 1791947654,
+    "hardware": {
+        "vendor": "QEMU",
+        "model": "Standard PC (Q35 + ICH9, 2009)",
+        "cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+        "memory_mb": 7841,
+        "tpm2": true,
+        "secure_boot": true
+    },
+    "inventory": [
+        {
+            "app_id": "net.mauvely.compose.app",
+            "branch": "stable",
+            "remote": "mauvely",
+            "managed": true,
+            "seen_at": 1791947654
+        },
+        {
+            "app_id": "org.mozilla.firefox",
+            "branch": "stable",
+            "remote": "flathub",
+            "managed": true,
+            "seen_at": 1791947654
+        },
+        {
+            "app_id": "org.onlyoffice.desktopeditors",
+            "branch": "stable",
+            "remote": "flathub",
+            "managed": true,
+            "seen_at": 1791947654
+        }
+    ]
+}
+
+== GET /collections/col_6acef0df60f174a87592baca/apps, after Chromium was unassigned
+{
+    "apps": [
+        {
+            "app_id": "org.mozilla.firefox",
+            "branch": "stable",
+            "remote": "flathub",
+            "state": "installed",
+            "name": "Firefox",
+            "summary": "Web browser",
+            "icon_url": null
+        },
+        {
+            "app_id": "net.mauvely.compose.app",
+            "branch": "stable",
+            "remote": "mauvely",
+            "state": "installed",
+            "name": "Mauvely Compose",
+            "summary": "Author courses that behave like software",
+            "icon_url": null
+        },
+        {
+            "app_id": "org.onlyoffice.desktopeditors",
+            "branch": "stable",
+            "remote": "flathub",
+            "state": "installed",
+            "name": "ONLYOFFICE",
+            "summary": "Documents, spreadsheets and presentations",
+            "icon_url": null
+        }
+    ]
+}
+
+== GET /audit (website-devices' devices_audit), newest first
+{
+    "entries": [
+        {
+            "id": "aud_6acef3a7f66c78af26f0abea",
+            "actor_user_id": "u_p7admin",
+            "action": "device.revoke",
+            "target": "dev_6acef2aa358ded5988e125c3",
+            "detail": null,
+            "at": 1791947687
+        },
+        {
+            "id": "aud_6acef2dc2474a70070ba7c93",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.app.remove",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "app_id": "org.chromium.Chromium"
+            },
+            "at": 1791947484
+        },
+        {
+            "id": "aud_6acef2aa63fe00df8c2b3751",
+            "actor_user_id": null,
+            "action": "device.enrol",
+            "target": "dev_6acef2aa358ded5988e125c3",
+            "detail": {
+                "token_id": "enr_6acef0e4050262c47664e84a"
+            },
+            "at": 1791947434
+        },
+        {
+            "id": "aud_6acef0e44470897a06728cab",
+            "actor_user_id": "u_p7admin",
+            "action": "token.create",
+            "target": "enr_6acef0e4050262c47664e84a",
+            "detail": {
+                "collection_id": "col_6acef0df60f174a87592baca",
+                "expires_at": 1792033380,
+                "max_uses": 1
+            },
+            "at": 1791946980
+        },
+        {
+            "id": "aud_6acef0df8faac26de64854d2",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.create",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "id": "col_6acef0df60f174a87592baca",
+                "name": "Office Machines",
+                "image_tag": null,
+                "interval_s": 60
+            },
+            "at": 1791946975
+        },
+        {
+            "id": "aud_6acef0df54ed7c2af8816fd7",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.app.set",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "app_id": "net.mauvely.compose.app",
+                "state": "installed"
+            },
+            "at": 1791946975
+        },
+        {
+            "id": "aud_6acef0df54018eb187b11320",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.app.set",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "app_id": "org.mozilla.firefox",
+                "state": "installed"
+            },
+            "at": 1791946975
+        },
+        {
+            "id": "aud_6acef0df4ae834fee83810e7",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.app.set",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "app_id": "org.onlyoffice.desktopeditors",
+                "state": "installed"
+            },
+            "at": 1791946975
+        },
+        {
+            "id": "aud_6acef0df279f17bd1e1190b7",
+            "actor_user_id": "u_p7admin",
+            "action": "collection.app.set",
+            "target": "col_6acef0df60f174a87592baca",
+            "detail": {
+                "app_id": "org.chromium.Chromium",
+                "state": "installed"
+            },
+            "at": 1791946975
+        }
+    ],
+    "next_cursor": null
+}

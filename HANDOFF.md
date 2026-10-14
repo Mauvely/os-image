@@ -8,6 +8,21 @@ and ended green (run 38500193127). **The build itself has never run there**, the
 publish workflow has never run at all, and nothing was published or pushed to any
 registry.
 
+## P7, the end-to-end demo (2026-10-14)
+
+**P7 passed** on P5's image, through os-installer's test ISO, against a
+local website-devices and website-enterprise. The stages were:
+- install;
+- enrol by token;
+- four apps from the collection: Compose from a local mauvely remote, the
+  others from Flathub;
+- one app unassigned and removed;
+- revoke, then 403.
+
+`proof/p7/README.md` has the setup, the timeline, and what the run did not
+show.
+
+
 ## What is here
 
 - `Containerfile`: a builder stage for `mauvelyd` (Fedora 44, `cargo build
