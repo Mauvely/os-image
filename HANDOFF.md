@@ -23,7 +23,7 @@ local website-devices and website-enterprise. The stages were:
 show.
 
 
-## T4, the registry (2026-10-14, on `main` since `32427c9`)
+## T4, the registry (2026-10-14: done, `stable` published)
 
 **Timur decided:**
 - public GHCR at `ghcr.io/mauvely/os`, with two tags, `stable` and `next`;
@@ -59,8 +59,6 @@ the lint: run 38566709935, 5 minutes, green.
   workflow pins v2.
 
 **Never run:**
-- **`publish-image.yml` with `stable`:** skopeo 1.13's `--preserve-digests`
-  and `cosign verify` against GHCR. `next` has run (below).
 - **`/etc` keeps a locally edited `policy.json` whole** across updates
   (`proof/t4/`). A future key rotation reaches only devices whose file is
   untouched.
@@ -78,10 +76,11 @@ the lint: run 38566709935, 5 minutes, green.
    and production (website-devices `3a89f2c`).
 6. ~~Check in a VM~~: enrolled against staging, it switched to `next`, booted
    it, then staged a second `next` (`46945ca1…`) through the real key, and
-   refused it under a throwaway key (`proof/t4/`, "On GHCR"). Then `stable`,
-   Timur's dispatch.
+   refused it under a throwaway key (`proof/t4/`, "On GHCR").
+8. ~~`stable`~~: run 38575339843, green. `:stable` and `:next` are both
+   `sha256:46945ca1…6650`, the build the VM staged.
 7. ~~The installer's target ref~~: `ghcr.io/mauvely/os:stable`, os-installer
-   `7218b1b`. `:stable` does not exist until step 6's dispatch.
+   `7218b1b`.
 
 The machines from P5–P7 report `registry.invalid/…`. Their first switch to
 GHCR pulls without a check, because their own image has no policy yet.
