@@ -1,0 +1,196 @@
+# Publishes the Mauvely Flatpak remote: the apps' bundles from the release feed,
+# re-branded to `stable`, signed, and synced to R2 `mauvely-flatpak`.
+#
+# By hand only. Publishing changes what every enrolled device is told to
+# install, so it is somebody's decision and never a side effect of a push.
+#
+# ── Secrets this needs (Timur creates them; none exists yet) ────────────────
+#   FLATPAK_GPG_KEY        the private signing key, armored (exists already)
+#   R2_ACCOUNT_ID          the Cloudflare account id
+#   R2_ACCESS_KEY_ID       an R2 API token's access key id, with Object Read & Write
+#   R2_SECRET_ACCESS_KEY   its secret access key
+# If any is missing the run says which and ends green, without touching R2.
+#
+# ── Where the repo lives ────────────────────────────────────────────────────
+# The plane tells devices to use https://flatpak.mauvely.com/repo
+# (website-devices' FLATPAK_REMOTE_URL), so the repo's files sit under the
+# `repo/` prefix of the bucket and the custom domain needs no rewrite rule.
+#
+# ── Order of the upload, and why ────────────────────────────────────────────
+# A client that reads a summary naming an object that is not there fails, so a
+# summary may only appear after everything it names: objects, deltas and delta
+# indexes; then summaries/; then summary.idx and summary; refs/ last.
+# objects/ and deltas/ never change once written, so they are cached for a year.
+# Everything else is revalidated.
+
+name: Publish Flatpak remote
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: App keys in the release feed, separated by spaces
+        default: compose sotto
+        required: true
+
+concurrency:
+  # Two runs would each sync a whole repo down and up, and the second would
+  # overwrite the first's summary with one that does not name its apps.
+  group: publish-flatpak
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  R2_BUCKET: mauvely-flatpak
+  R2_PREFIX: repo
+
+jobs:
+  publish:
+    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets
+        id: gate
+        env:
+          FLATPAK_GPG_KEY: ${{ secrets.FLATPAK_GPG_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          missing=""
+          for name in FLATPAK_GPG_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice title=Nothing published::Missing secrets:$missing. Nothing was changed."
+            {
+              echo "### Nothing published"
+              echo
+              echo "These secrets are not set:$missing"
+              echo "Add them in the repository's Actions secrets and run this workflow again."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install flatpak and ostree
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          if ! command -v flatpak >/dev/null || ! command -v ostree >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends flatpak ostree
+          fi
+          command -v aws >/dev/null || { echo "::error::the aws CLI is needed to talk to R2"; exit 1; }
+          flatpak --version
+
+      - name: Import the signing key
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          FLATPAK_GPG_KEY: ${{ secrets.FLATPAK_GPG_KEY }}
+        run: |
+          # A temporary keyring, outside the workspace, removed at the end.
+          GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/gnupg.XXXXXX")"
+          chmod 700 "$GNUPGHOME"
+          export GNUPGHOME
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+
+          # The secret is armored text. A base64 copy of the binary key (the form
+          # website-devices holds the public half in) is accepted too.
+          printf '%s\n' "$FLATPAK_GPG_KEY" | gpg --batch --quiet --import 2>/dev/null || true
+          if ! gpg --list-secret-keys --with-colons 2>/dev/null | grep -q '^sec:'; then
+            printf '%s' "$FLATPAK_GPG_KEY" | base64 -d 2>/dev/null | gpg --batch --quiet --import 2>/dev/null || true
+          fi
+
+          imported="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/{s=1; next} s && /^fpr:/{print $10; s=0}')"
+          committed="$(gpg --show-keys --with-colons keys/mauvely-flatpak.gpg | awk -F: '/^fpr:/{print $10; exit}')"
+          expected=C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A
+
+          # Refuse to sign with anything but the key the devices trust.
+          if [ "$committed" != "$expected" ]; then
+            echo "::error::keys/mauvely-flatpak.gpg is $committed, not $expected"
+            exit 1
+          fi
+          if [ "$imported" != "$committed" ]; then
+            echo "::error::the FLATPAK_GPG_KEY secret holds '${imported:-no secret key}', not $committed. Nothing was signed."
+            exit 1
+          fi
+          echo "GPG_KEY=$imported" >> "$GITHUB_ENV"
+          echo "signing with $imported"
+
+      - name: Sync the repo down from R2
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 does not take the newer default checksums.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          # The whole repo each run: build-update-repo computes the summary and the
+          # deltas from what is in it. An empty bucket is a first publish.
+          mkdir -p "$RUNNER_TEMP/flatpak-repo"
+          aws s3 sync "s3://$R2_BUCKET/$R2_PREFIX/" "$RUNNER_TEMP/flatpak-repo/" \
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          echo "files in the repo: $(find "$RUNNER_TEMP/flatpak-repo" -type f | wc -l)"
+
+      - name: Publish into the repo
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          APPS: ${{ inputs.apps }}
+        run: |
+          # The script checks each key, so word-splitting here is the point.
+          # shellcheck disable=SC2086
+          REPO="$RUNNER_TEMP/flatpak-repo" WORK="$RUNNER_TEMP/flatpak-work" \
+            scripts/publish-flatpak.sh $APPS
+
+      - name: Sync the repo up to R2
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          repo="$RUNNER_TEMP/flatpak-repo"
+          dest="s3://$R2_BUCKET/$R2_PREFIX"
+          forever='public, max-age=31536000, immutable'
+          revalidate='no-cache'
+          s3() { aws s3 "$@" --endpoint-url "$R2_ENDPOINT" --only-show-errors; }
+
+          # 1. what the summary will name
+          s3 sync "$repo/objects" "$dest/objects" --cache-control "$forever"
+          s3 sync "$repo/deltas" "$dest/deltas" --cache-control "$forever"
+          [ ! -d "$repo/delta-indexes" ] || s3 sync "$repo/delta-indexes" "$dest/delta-indexes" --cache-control "$revalidate"
+          # 2. the summaries the index points at
+          [ ! -d "$repo/summaries" ] || s3 sync "$repo/summaries" "$dest/summaries" --cache-control "$revalidate"
+          # 3. the index and the summary, and the repo's config
+          for f in summary.idx.sig summary.idx summary.sig summary config; do
+            [ ! -f "$repo/$f" ] || s3 cp "$repo/$f" "$dest/$f" --cache-control "$revalidate"
+          done
+          # 4. refs last: the moment a client can see a new commit
+          s3 sync "$repo/refs" "$dest/refs" --cache-control "$revalidate"
+
+          {
+            echo "### Published to \`$R2_BUCKET/$R2_PREFIX\`"
+            echo
+            echo '```'
+            ostree --repo="$repo" refs
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the keyring
+        if: always() && steps.gate.outputs.ready == 'true'
+        run: |
+          if [ -n "${GNUPGHOME:-}" ]; then
+            gpgconf --kill gpg-agent 2>/dev/null || true
+            rm -rf "$GNUPGHOME"
+          fi
