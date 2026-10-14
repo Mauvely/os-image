@@ -1,0 +1,8 @@
+SecureBoot enabled
+└─vda4                                        crypto_LUKS
+  └─luks-0813c9b2-b51e-419c-ad3b-de9e4e31b1ea xfs
+SLOT TYPE
+   1 tpm2
+NAME="Mauvely OS"
+● Booted image: registry.invalid/mauvely/os:spike
+        Digest: sha256:430929bf49181da30c45b775a579851eb9d4c4329bc111288110a6485876b74e (amd64)

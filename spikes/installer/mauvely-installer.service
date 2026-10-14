@@ -1,0 +1,14 @@
+[Unit]
+Description=Mauvely OS installer (spike stand-in for the Qt app)
+After=multi-user.target systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/mauvely-install
+StandardOutput=journal+console
+StandardError=journal+console
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

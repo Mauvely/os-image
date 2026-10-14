@@ -1,0 +1,24 @@
+[    0.000000] secureboot: Secure boot enabled
+[    0.003250] secureboot: Secure boot enabled
+[    0.502367] raid6: using avx2x2 recovery algorithm
+[    0.743850] input: Power Button as /devices/platform/LNXPWRBN:00/input/input0
+[    0.745165] ACPI: button: Power Button [PWRF]
+         Starting selinux-autorelabel-mark.…the need to relabel after reboot...
+[  OK  ] Finished selinux-autorelabel-mark.…k the need to relabel after reboot.
+[    6.030791] mauvely-install[1031]: MAUVELY-INSTALLER: start
+[    6.038143] mauvely-install[1031]: live medium: /dev/sr0
+[    6.042674] mauvely-install[1031]: target disk: /dev/vda
+[    6.235499] mauvely-install[1031]: payload: localhost/mauvely-os:spike-ssh
+[    6.342763] mauvely-install[1116]: Installing image: docker://registry.invalid/mauvely/os:spike
+[   13.210135] mauvely-install[1116]: > systemd-cryptenroll --wipe-slot=all --tpm2-device=auto --unlock-key-file /tmp/.tmpGFVM5h /dev/vda4
+[  162.276777] mauvely-install[1116]: Unmounting filesystems
+[  162.295471] mauvely-install[1116]: Closing root LUKS device
+[  162.305779] mauvely-install[1116]: error: Installing to disk: Task Closing root LUKS device failed: ExitStatus(unix_wait_status(1280))
+[  162.341973] mauvely-install[1031]: MAUVELY-INSTALLER: recovering the leaked mount
+[  162.947232] mauvely-install[1031]: MAUVELY-INSTALLER: bootc exit=0
+[  162.952334] mauvely-install[1031]: MAUVELY-INSTALL-DONE
+[  OK  ] Stopped selinux-autorelabel-mark.s…k the need to relabel after reboot.
+[  OK  ] Finished systemd-poweroff.service - System Power Off.
+[  OK  ] Reached target poweroff.target - System Power Off.
+[  167.181454] systemd-shutdown[1]: Powering off.
+[  167.204181] reboot: Power down
