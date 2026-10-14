@@ -23,7 +23,7 @@ local website-devices and website-enterprise. The stages were:
 show.
 
 
-## T4, the registry (2026-10-14, branch `t4-ghcr`)
+## T4, the registry (2026-10-14, on `main` since `32427c9`)
 
 **Timur decided:**
 - public GHCR at `ghcr.io/mauvely/os`, with two tags, `stable` and `next`;
@@ -31,10 +31,10 @@ show.
 - the registry can move later through website-devices' `OS_IMAGE_REPO`.
   `registry.mauvely.com` on R2 is the later option.
 
-**It is on a branch, not `main`.** The Containerfile now copies
-`keys/cosign.pub`, and that file exists only once Timur makes the key pair.
-`build.yml` fails on `main` without it. Merge the branch and the key in one
-push.
+**Merged with the key.** Timur made the key pair, which created the
+`COSIGN_*` secrets, and all three OS repositories are public. `build.yml` then
+built the whole image on GitHub for the first time, including the agent and
+the lint: run 38566709935, 5 minutes, green.
 
 **What the branch adds:**
 - `policy.json` gains one `sigstoreSigned` rule for `ghcr.io/mauvely/os`, with
@@ -69,12 +69,8 @@ push.
   so they too can stage only a signed image.
 
 **The first publish, in order:**
-1. Timur runs `cosign generate-key-pair github://Mauvely/os-image` from
-   `keys/`. It creates the secrets `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD`
-   and `COSIGN_PUBLIC_KEY`, and writes `cosign.pub`. Commit only that file,
-   on this branch, then merge.
-2. Make os-agent and os-image public. The workflow refuses while either is
-   private.
+1. ~~The key pair~~, done 2026-10-14.
+2. ~~os-agent and os-image public~~, done 2026-10-14.
 3. Dispatch `publish-image.yml` with `next`.
 4. Make the GHCR package `mauvely/os` public. A package's first push creates
    it private.
@@ -242,17 +238,13 @@ once that is installed.
 
 ## Waiting for Timur
 
-- **Make os-agent public.** Until then `build.yml` writes a warning and a
-  summary and ends green without building, and `publish-image.yml` refuses.
-  `OS_AGENT_TOKEN` would unblock the build only: publishing needs the source
-  public.
 - **R2 secrets for the publish workflow:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
   `R2_SECRET_ACCESS_KEY` (an R2 API token with Object Read & Write on
   `mauvely-flatpak`). `FLATPAK_GPG_KEY` exists already. With any missing, the run
   says which and ends green. Also the `flatpak.mauvely.com` custom domain on the
   bucket, serving `/repo/…`.
-- **T4's first publish**, steps 1 to 4 above: the cosign key pair, both
-  repositories public, the dispatch, and the package made public.
+- **T4's first publish**, steps 3 and 4 above: the dispatch, then the
+  package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
 - Plan 20 (ids to `com.mauvely.*`): the publish script reads ids from the bundles,
   so the first publish after the move adds the new refs. The old
