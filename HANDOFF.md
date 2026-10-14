@@ -246,15 +246,32 @@ once that is installed.
 - **T4's first publish**, steps 3 and 4 above: the dispatch, then the
   package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
-- **Nothing builds a Flatpak any more, so the first publish has nothing new to
-  publish.** The apps' release workflows dropped their Flatpak lane on
-  2026-09-12 (Compose `31a47e5`: the self-hosted runners cannot give bwrap a
-  user namespace). The feed's newest `flatpak` items are Compose 0.5.3 and
-  Sotto 0.1.0, under the old `net.mauvely.*.app` ids, while plan 20 moved the
-  apps and website-devices' catalog (0002) to `com.mauvely.<key>` on
-  2026-10-14. Published now, the remote would hold refs no device is told to
-  install. **Do not dispatch `publish-flatpak.yml` until a Flatpak is built
-  again under the new ids**; where it is built is Timur's call.
+- **The first Flatpak publish waits for two releases.** The apps' release
+  workflows dropped their Flatpak lane on 2026-09-12 (Compose `31a47e5`: the
+  self-hosted runners cannot give bwrap a user namespace), so the feed's newest
+  `flatpak` items are Compose 0.5.3 and Sotto 0.1.0 under the old
+  `net.mauvely.*.app` ids. Published now, the remote would hold refs no device
+  is told to install. Since 2026-10-14 the lane is back, on GitHub's runner
+  (app-base's `HANDOFF.md`), and builds under `com.mauvely.<key>`. In order:
+  1. Compose and Sotto each get a version bump (0.5.3 and 0.1.0 already have
+     old-id `flatpak` rows, so the gate skips the lane for them), then a
+     release dispatch. Their first `flatpak` job is the lane's first run.
+  2. `curl -s "https://mauvely.com/api/releases?app=compose"` shows a
+     `flatpak` item whose filename is the new version.
+  3. Then dispatch `publish-flatpak.yml`. `scripts/test-publish-flatpak.sh`
+     reads the live feed, so run it first: it should import refs named
+     `app/com.mauvely.compose/…` and `app/com.mauvely.sotto/…`.
+  The bundles were built and installed from a throwaway-key repo on this
+  machine on 2026-10-14, so steps 3–4 of `publish-flatpak.sh` are proven on
+  them; the GitHub build is not.
+- **Flathub for the runtime.** The bundles name Flathub as their
+  `--runtime-repo`, and `org.kde.Platform` (and Compose's QtWebEngine
+  BaseApp, which is build-time only) come from there. A device that has only
+  the Mauvely remote cannot install either app until it also has Flathub.
+  It does not today: website-devices' `desiredState()` (`worker/routes/agent.ts`)
+  sends only the remotes of the assigned apps, so a collection whose only app
+  is Compose gets `mauvely` alone. P7 never saw it because Firefox and the
+  others brought Flathub with them. Not fixed; it is a change to the plane.
 
 ## Tried and rejected
 
