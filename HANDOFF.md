@@ -23,6 +23,72 @@ local website-devices and website-enterprise. The stages were:
 show.
 
 
+## T4, the registry (2026-10-14, branch `t4-ghcr`)
+
+**Timur decided:**
+- public GHCR at `ghcr.io/mauvely/os`, with two tags, `stable` and `next`;
+- cosign-signed, and the image's own policy requires the signature;
+- the registry can move later through website-devices' `OS_IMAGE_REPO`.
+  `registry.mauvely.com` on R2 is the later option.
+
+**It is on a branch, not `main`.** The Containerfile now copies
+`keys/cosign.pub`, and that file exists only once Timur makes the key pair.
+`build.yml` fails on `main` without it. Merge the branch and the key in one
+push.
+
+**What the branch adds:**
+- `policy.json` gains one `sigstoreSigned` rule for `ghcr.io/mauvely/os`, with
+  the key at `/etc/pki/containers/mauvely-os.pub`.
+- `registries.d/mauvely-os.yaml` turns on sigstore attachments for that
+  repository. Every other registry keeps the base's accept-anything default.
+- `publish-image.yml`, dispatched by hand. Its header says what each channel
+  does and what it refuses to run without.
+- `scripts/test-image-policy.sh`.
+- `agent.ref` moves to `09b2536`. The agent now runs `bootc upgrade` when the
+  booted image is the one wanted, so a device on `stable` takes a newer
+  stable. Before this, nothing ever upgraded within a tag.
+
+**Shown:**
+- **On real bootc** (`proof/t4/`), in an overlay of P5's VM:
+  - an unsigned image and a wrong-key image are refused by `bootc switch` and
+    by `bootc upgrade`, with the default transport and no flag;
+  - a signed image is accepted;
+  - `bootc upgrade` stages a newer signed build under the same tag.
+- **`test-image-policy.sh`** shows the same with skopeo. It also shows that
+  cosign v3's default format is invisible to devices, which is why the
+  workflow pins v2.
+
+**Never run:**
+- **`publish-image.yml` on GitHub:** GHCR, the real key, Rekor, podman 4.9's
+  `--digestfile`, skopeo 1.13's `--preserve-digests` and global
+  `--registries.d`. It passes actionlint and shellcheck, nothing more.
+- **`/etc` keeps a locally edited `policy.json` whole** across updates
+  (`proof/t4/`). A future key rotation reaches only devices whose file is
+  untouched.
+- **Discover and `rpm-ostree upgrade`** (below) pull through the same policy,
+  so they too can stage only a signed image.
+
+**The first publish, in order:**
+1. Timur runs `cosign generate-key-pair github://Mauvely/os-image` from
+   `keys/`. It creates the secrets `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD`
+   and `COSIGN_PUBLIC_KEY`, and writes `cosign.pub`. Commit only that file,
+   on this branch, then merge.
+2. Make os-agent and os-image public. The workflow refuses while either is
+   private.
+3. Dispatch `publish-image.yml` with `next`.
+4. Make the GHCR package `mauvely/os` public. A package's first push creates
+   it private.
+5. Set website-devices' `OS_IMAGE_REPO` to `ghcr.io/mauvely/os`, on staging
+   first.
+6. Check in a VM: a machine on `next` switches to it, and later upgrades.
+   Then dispatch `stable`.
+7. The installer's target ref is os-installer's change: it becomes
+   `ghcr.io/mauvely/os:stable`.
+
+The machines from P5–P7 report `registry.invalid/…`. Their first switch to
+GHCR pulls without a check, because their own image has no policy yet.
+After that, the policy holds.
+
 ## What is here
 
 - `Containerfile`: a builder stage for `mauvelyd` (Fedora 44, `cargo build
@@ -46,7 +112,7 @@ show.
 - `keys/mauvely-flatpak.gpg`: the public key. Its fingerprint is
   `C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A`, and its bytes equal the base64
   `FLATPAK_GPG_KEY` in website-devices' `wrangler.jsonc`, both the production and
-  staging values. `~/mauvely-flatpak-public.gpg` is still there for Timur to delete.
+  staging values.
 - `scripts/publish-flatpak.sh`, `scripts/test-publish-flatpak.sh` and the two
   workflows in `.github/workflows/`.
 - `spikes/p5-install.sh` and `spikes/p5-evidence.sh`: the VM test. `spikes/env.sh`
@@ -176,18 +242,17 @@ once that is installed.
 
 ## Waiting for Timur
 
-- **`OS_AGENT_TOKEN`**, a token that can read `Mauvely/os-agent`, as an Actions
-  secret, **or** make os-agent public (the gate then needs no secret). Until then
-  `build.yml` writes a warning and a summary and ends green without building.
+- **Make os-agent public.** Until then `build.yml` writes a warning and a
+  summary and ends green without building, and `publish-image.yml` refuses.
+  `OS_AGENT_TOKEN` would unblock the build only: publishing needs the source
+  public.
 - **R2 secrets for the publish workflow:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
   `R2_SECRET_ACCESS_KEY` (an R2 API token with Object Read & Write on
   `mauvely-flatpak`). `FLATPAK_GPG_KEY` exists already. With any missing, the run
   says which and ends green. Also the `flatpak.mauvely.com` custom domain on the
   bucket, serving `/repo/…`.
-- **T4**, the image registry, and then `policy.json` signature enforcement. The
-  installed machine reports `ostree-unverified-registry:registry.invalid/…`, and
-  that stays so until both.
-- Delete `~/mauvely-flatpak-public.gpg`.
+- **T4's first publish**, steps 1 to 4 above: the cosign key pair, both
+  repositories public, the dispatch, and the package made public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
 - Plan 20 (ids to `com.mauvely.*`): the publish script reads ids from the bundles,
   so the first publish after the move adds the new refs. The old
