@@ -38,6 +38,9 @@ superproject. Read it before changing anything here.
   - The Flatpak key's fingerprint is
     `C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A`. Check any public key file
     against it.
+  - `keys/cosign.pub` (P-256, made 2026-10-14) has the sha256
+    `62388839b87ecd602f8d372fd57a6f654cec69635c3ddcef877aefeeda836aee`. A change to it is a key rotation: every device keeps trusting
+    the old key until it boots an image that carries the new one.
 - **The base image tag is pinned**, never `latest`. Moving it is a deliberate
   commit.
 - **Publishing the Flatpak remote is Timur's call.** A session does not
