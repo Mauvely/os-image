@@ -243,36 +243,35 @@ once that is installed.
   set, and `flatpak.mauvely.com` is the bucket's custom domain.
   `/repo/config` answers R2's own 404, "Object not found", until the first
   publish. **The publish itself waits for plan 20's releases** (below).
-- **T4's first publish**, steps 3 and 4 above: the dispatch, then the
-  package made public.
+- ~~**T4's first publish**~~ Done 2026-10-14: `next` and `stable` are
+  published, signed and public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
-- **The first Flatpak publish waits for two releases.** The apps' release
+- **The first Flatpak publish waits for Compose 0.5.4.** The apps' release
   workflows dropped their Flatpak lane on 2026-09-12 (Compose `31a47e5`: the
-  self-hosted runners cannot give bwrap a user namespace), so the feed's newest
-  `flatpak` items are Compose 0.5.3 and Sotto 0.1.0 under the old
-  `net.mauvely.*.app` ids. Published now, the remote would hold refs no device
-  is told to install. Since 2026-10-14 the lane is back, on GitHub's runner
-  (app-base's `HANDOFF.md`), and builds under `com.mauvely.<key>`. In order:
-  1. Compose 0.5.4 and Sotto 0.1.1 (bumped 2026-10-14; 0.5.3 and 0.1.0
-     already have old-id `flatpak` rows, so the gate skips the lane for
-     them) each get a release dispatch. Their first `flatpak` job is the
-     lane's first run.
-  2. `curl -s "https://mauvely.com/api/releases?app=compose"` shows a
-     `flatpak` item whose filename is the new version.
-  3. Then dispatch `publish-flatpak.yml`. `scripts/test-publish-flatpak.sh`
-     reads the live feed, so run it first: it should import refs named
-     `app/com.mauvely.compose/…` and `app/com.mauvely.sotto/…`.
-  The bundles were built and installed from a throwaway-key repo on this
-  machine on 2026-10-14, so steps 3–4 of `publish-flatpak.sh` are proven on
-  them; the GitHub- **Flathub for the runtime.** The bundles name Flathub as their
-  `--runtime-repo`, and `org.kde.Platform` comes from there, not from the
-  Mauvely remote. website-devices now sends Flathub whenever a Mauvely app
-  is assigned (`8e935a8`, 2026-10-14, staging and production), so a
-  collection with only Mauvely apps works. Before that it sent only the
-  assigned apps' own remotes, and P7 never noticed because Firefox brought
-  Flathub along.
-
-to the plane.
+  self-hosted runners cannot give bwrap a user namespace), so until today the
+  feed's `flatpak` items were all old-id: Compose's newest is still 0.5.3,
+  `net.mauvely.compose.app`. Since 2026-10-14 the lane is back, on GitHub's
+  runner (app-base's `HANDOFF.md`), and builds under `com.mauvely.<key>`.
+  - **Sotto 0.1.1 is in the feed** as `com.mauvely.sotto`, built on GitHub.
+    `scripts/test-publish-flatpak.sh sotto` passed on it on 2026-10-14: it
+    published, read back as `com.mauvely.sotto//stable`, and was refused under
+    the wrong key.
+  - **Compose 0.5.4's release failed at registration with a 401.** Compose's
+    repo secret `MAUVELY_RELEASES_TOKEN` (set 2026-07-30) overrides the org's
+    and is stale. Once it is fixed and the run re-run,
+    `curl -s "https://mauvely.com/api/releases?app=compose"` shows a `flatpak`
+    item for 0.5.4.
+  - Then run `scripts/test-publish-flatpak.sh` (it reads the live feed) and
+    dispatch `publish-flatpak.yml`. Sotto can go first on its own, with the
+    workflow's `apps` input set to `sotto`.
+  - Since 2026-10-14 `publish-flatpak.sh` refuses any id but
+    `com.mauvely.<key>`, so a dispatch before Compose 0.5.4 fails on Compose
+    instead of signing 0.5.3's old id into the remote.
+- ~~**Flathub for the runtime.**~~ Fixed 2026-10-14 in website-devices
+  `8e935a8`, on staging and production: the plane sends Flathub whenever a
+  Mauvely app is assigned. The bundles name it as their `--runtime-repo`, and
+  `org.kde.Platform` comes from there, not from the Mauvely remote. P7 never
+  saw it because Firefox brought Flathub along.
 
 ## Tried and rejected
 

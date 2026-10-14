@@ -7,9 +7,9 @@
 # For each app key the script
 #   1. reads the release feed and takes the newest `flatpak` item for linux-x86_64,
 #   2. downloads it and checks its sha256 against the feed,
-#   3. imports it into a scratch repo, which says what its ref is: the app id is
-#      read from the bundle, never written down here (ids moved from
-#      net.mauvely.*.app to com.mauvely.* in plan 20),
+#   3. imports it into a scratch repo, which says what its ref is, and refuses
+#      any app id but com.mauvely.<key> (ids moved from net.mauvely.*.app in
+#      plan 20, and older bundles are still in the feed),
 #   4. re-brands that ref to $BRANCH with `flatpak build-commit-from`, which
 #      rewrites the ref binding inside the commit and signs it. Importing with
 #      --ref=.../stable instead publishes, and then fails on install,
@@ -76,6 +76,11 @@ print(i["url"], i["sha256"], i["version"], i["filename"])
   [ "$(wc -l <<<"$ref")" -eq 1 ] && [[ "$ref" =~ ^app/[A-Za-z0-9._-]+/$arch/[A-Za-z0-9._-]+$ ]] \
     || { echo "publish-flatpak: expected one app/…/$arch/… ref in $filename, got: '$ref'" >&2; exit 1; }
   id="${ref#app/}"; id="${id%%/*}"
+  # The feed still holds bundles from before plan 20 (Compose 0.5.3 is
+  # net.mauvely.compose.app), and one of those here is an app no device is
+  # ever assigned, signed for good.
+  [ "$id" = "com.mauvely.$app" ] \
+    || { echo "publish-flatpak: $filename is $id, not com.mauvely.$app; release a newer $app first" >&2; exit 1; }
 
   # 4. Re-brand to $branch, into the real repo, signed. "no change" is not an error.
   flatpak build-commit-from --src-repo="$work/import" --src-ref="$ref" \
