@@ -76,9 +76,10 @@ the lint: run 38566709935, 5 minutes, green.
 4. ~~Make the GHCR package public~~: done; an anonymous manifest read answers 200.
 5. ~~website-devices' `OS_IMAGE_REPO`~~ is `ghcr.io/mauvely/os`, on staging
    and production (website-devices `3a89f2c`).
-6. **Half done.** A VM enrolled against staging switched to `next` and booted
-   it (`proof/t4/`, "On GHCR"). The upgrade to a newer `next` waits for a
-   second dispatch. Then `stable`.
+6. ~~Check in a VM~~: enrolled against staging, it switched to `next`, booted
+   it, then staged a second `next` (`46945ca1…`) through the real key, and
+   refused it under a throwaway key (`proof/t4/`, "On GHCR"). Then `stable`,
+   Timur's dispatch.
 7. ~~The installer's target ref~~: `ghcr.io/mauvely/os:stable`, os-installer
    `7218b1b`. `:stable` does not exist until step 6's dispatch.
 

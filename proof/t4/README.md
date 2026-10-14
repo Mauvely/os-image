@@ -92,6 +92,14 @@ After that, Timur made the package public.
 **The first switch was not checked.** P5's image has no rule for GHCR, so it
 pulled under accept-anything. That is true of every machine from before T4.
 
-**Not yet shown:** a device staging a newer `next`. That is the first time a
-device checks the real key's signature itself. It waits for a second
-dispatch.
+**The upgrade, the first signature a device checked itself:**
+
+| Time (UTC) | What happened |
+|---|---|
+| 13:28 | Timur dispatched `next` again (run 38572089529, green): `sha256:46945ca1…6650` |
+| 13:35:11 | the agent's `bootc upgrade`: 9 layers (36 MB), through the image's own policy and the real key |
+| 13:35:53 | staged `sha256:46945ca1…6650`, still booted on `ccf06254…` |
+| 13:50 | from the VM, `skopeo copy` of that digest with the policy's key swapped for a throwaway P-256 key: `invalid signature when validating ASN.1 encoded signature`, exit 1 |
+
+So the signature is on GHCR, a device finds it, and a wrong key is refused.
+The staged build was not booted.
