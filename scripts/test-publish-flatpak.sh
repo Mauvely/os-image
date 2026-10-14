@@ -27,6 +27,13 @@ REPO="$dir/repo" WORK="$dir/work" GPG_KEY="$key" scripts/publish-flatpak.sh "${a
 REPO="$dir/repo" WORK="$dir/work" GPG_KEY="$key" scripts/publish-flatpak.sh "${apps[@]}" | grep -c 'no change' \
   | xargs -I{} echo "second run: {} refs reported 'no change'"
 
+echo "== a ref from before plan 20 is removed, as Compose 0.5.3's was from the live remote"
+old="app/net.mauvely.${apps[0]}.app/x86_64/stable"
+ostree --repo="$dir/repo" refs --create="$old" \
+  "$(ostree --repo="$dir/repo" rev-parse "app/com.mauvely.${apps[0]}/x86_64/stable")"
+REPO="$dir/repo" WORK="$dir/work" GPG_KEY="$key" scripts/publish-flatpak.sh "${apps[@]}" | grep "^removed $old"
+! ostree --repo="$dir/repo" refs | grep -q '^app/net\.' || { echo "FAIL: $old is still in the repo" >&2; exit 1; }
+
 echo "== publish once more onto a copy holding only files, which is what a repo synced down from R2 is"
 mkdir -p "$dir/r2repo"
 (cd "$dir/repo" && find . -type f -not -path './tmp/*' -not -path './state/*' -not -name .lock -print0 \

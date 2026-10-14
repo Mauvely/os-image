@@ -89,6 +89,14 @@ print(i["url"], i["sha256"], i["version"], i["filename"])
     "$repo" "app/$id/$arch/$branch"
 done
 
+# Refs from before plan 20. The first publish, on 2026-10-14, put Compose 0.5.3
+# in as net.mauvely.compose.app before the check above existed, and nothing
+# else ever removes a ref. publish-flatpak.yml deletes its file in R2 too.
+for old in $(ostree --repo="$repo" refs | grep '^app/net\.mauvely\.' || true); do
+  ostree --repo="$repo" refs --delete "$old"
+  echo "removed $old, from before plan 20"
+done
+
 flatpak build-update-repo --gpg-sign="$key" --gpg-homedir="$gnupghome" \
   --default-branch="$branch" --generate-static-deltas --prune "$repo"
 

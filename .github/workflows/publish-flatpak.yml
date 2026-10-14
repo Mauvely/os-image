@@ -176,8 +176,10 @@ jobs:
           for f in summary.idx.sig summary.idx summary.sig summary config; do
             [ ! -f "$repo/$f" ] || s3 cp "$repo/$f" "$dest/$f" --cache-control "$revalidate"
           done
-          # 4. refs last: the moment a client can see a new commit
-          s3 sync "$repo/refs" "$dest/refs" --cache-control "$revalidate"
+          # 4. refs last: the moment a client can see a new commit. --delete,
+          # because the repo came down whole, so a ref missing here was removed
+          # on purpose, and left in R2 the next run would sync it back down.
+          s3 sync "$repo/refs" "$dest/refs" --cache-control "$revalidate" --delete
 
           {
             echo "### Published to \`$R2_BUCKET/$R2_PREFIX\`"

@@ -241,32 +241,33 @@ once that is installed.
 
 - ~~**R2 secrets and the domain.**~~ Done 2026-10-14: all four secrets are
   set, and `flatpak.mauvely.com` is the bucket's custom domain.
-  `/repo/config` answers R2's own 404, "Object not found", until the first
-  publish. **The publish itself waits for plan 20's releases** (below).
+  The first publish ran the same day (below).
 - ~~**T4's first publish**~~ Done 2026-10-14: `next` and `stable` are
   published, signed and public.
 - Decide: Discover, and `rpm-ostree-countme.timer`, above.
-- **The first Flatpak publish waits for Compose 0.5.4.** The apps' release
-  workflows dropped their Flatpak lane on 2026-09-12 (Compose `31a47e5`: the
-  self-hosted runners cannot give bwrap a user namespace), so until today the
-  feed's `flatpak` items were all old-id: Compose's newest is still 0.5.3,
-  `net.mauvely.compose.app`. Since 2026-10-14 the lane is back, on GitHub's
-  runner (app-base's `HANDOFF.md`), and builds under `com.mauvely.<key>`.
-  - **Sotto 0.1.1 is in the feed** as `com.mauvely.sotto`, built on GitHub.
-    `scripts/test-publish-flatpak.sh sotto` passed on it on 2026-10-14: it
-    published, read back as `com.mauvely.sotto//stable`, and was refused under
-    the wrong key.
+- **The remote is live, with one wrong ref in it.** Timur dispatched
+  `publish-flatpak.yml` on 2026-10-14 at 18:49 UTC (run 38618413513), before
+  Compose 0.5.4 was in the feed and before the id check existed. A client
+  holding `keys/mauvely-flatpak.gpg` now lists `com.mauvely.sotto//stable`
+  (Sotto 0.1.1, right) and `net.mauvely.compose.app//stable` (Compose 0.5.3
+  from August, under the id from before plan 20). No device is assigned that
+  id, so nothing installs it.
+  - **The next dispatch removes it.** `publish-flatpak.sh` deletes any
+    `app/net.mauvely.*` ref and the workflow syncs `refs/` up with `--delete`
+    (`f80f287` added the id check; the removal is the commit after). Tried on
+    a mirror of the live remote with a throwaway key: `apps: sotto` removed
+    the Compose ref, left Sotto unchanged, and the summary named Sotto alone.
+    The R2 `--delete` itself has not run anywhere.
+  - Dispatching with `apps: sotto` now cleans it up today. With the default
+    `compose sotto` it fails on Compose until 0.5.4 is in the feed, because
+    the feed's newest Compose Flatpak is still 0.5.3's.
   - **Compose 0.5.4's release failed at registration with a 401.** Compose's
     repo secret `MAUVELY_RELEASES_TOKEN` (set 2026-07-30) overrides the org's
     and is stale. Once it is fixed and the run re-run,
     `curl -s "https://mauvely.com/api/releases?app=compose"` shows a `flatpak`
-    item for 0.5.4.
-  - Then run `scripts/test-publish-flatpak.sh` (it reads the live feed) and
-    dispatch `publish-flatpak.yml`. Sotto can go first on its own, with the
-    workflow's `apps` input set to `sotto`.
-  - Since 2026-10-14 `publish-flatpak.sh` refuses any id but
-    `com.mauvely.<key>`, so a dispatch before Compose 0.5.4 fails on Compose
-    instead of signing 0.5.3's old id into the remote.
+    item for 0.5.4, and a `compose sotto` dispatch publishes
+    `com.mauvely.compose`. `scripts/test-publish-flatpak.sh` reads the live
+    feed, so try it first.
 - ~~**Flathub for the runtime.**~~ Fixed 2026-10-14 in website-devices
   `8e935a8`, on staging and production: the plane sends Flathub whenever a
   Mauvely app is assigned. The bundles name it as their `--runtime-repo`, and
