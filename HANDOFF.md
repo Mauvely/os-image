@@ -1,5 +1,30 @@
 # Handoff
 
+## Brief 22, U2: mauvely-session in the image (2026-10-16)
+
+- **`agent.ref` → os-agent `d52c86f`.** mauvelyd now updates system Flatpaks
+  (at most every 6 h) and discards a staged image the server no longer wants
+  (`rpm-ostree cleanup --pending`). os-agent's `HANDOFF.md` has the detail and
+  what has never run.
+- **`mauvely-session`** is installed at `/usr/bin/mauvely-session`, with its user
+  unit in `/usr/lib/systemd/user/` and `systemctl --global enable`d into
+  `graphical-session.target`. It shows "Restart to finish updating" once per
+  staged deployment. `rpm-ostree` stays: the agent and the session both call it.
+- **Built locally** (`localhost/mauvely-os:u2`, lint 14 checks) from a clean
+  export of `d52c86f`: both binaries present, both units enabled.
+- **Not run on a booted system.** The first `next` that carries it is the first
+  test, on Timur's Proxmox VM.
+
+## From Timur's first install on Proxmox (2026-10-16), not done yet
+
+He asked for these to be noted, not done:
+- **Boot is text, not a splash.** The image has no `/usr/lib/bootc/kargs.d`, so
+  `bootc install` writes no `rhgb quiet` (Anaconda adds them for Kinoite). Add a
+  `kargs.d` file, and a Mauvely two-step Plymouth theme instead of `bgrt`.
+- **The installer's copy step looks stuck** (os-installer): bootc prints nothing
+  between "layers needed: 266 (7.5 GB)" and the end. Show the bytes written to
+  the target disk instead.
+
 ## Brief 22, U1: updates (2026-10-16)
 
 Brief 22 is `Website/website-internal/docs/launch/plans/22-os-updates-sso-vault.md`.
