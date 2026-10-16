@@ -2,7 +2,7 @@
 
 ## Brief 22, U2: mauvely-session in the image (2026-10-16)
 
-- **`agent.ref` → os-agent `d52c86f`.** mauvelyd now updates system Flatpaks
+- **`agent.ref` → os-agent `d279540`** (`d52c86f`, plus a fix: a staged deployment of the booted image, as mauvely-seal makes, is not announced). mauvelyd now updates system Flatpaks
   (at most every 6 h) and discards a staged image the server no longer wants
   (`rpm-ostree cleanup --pending`). os-agent's `HANDOFF.md` has the detail and
   what has never run.
