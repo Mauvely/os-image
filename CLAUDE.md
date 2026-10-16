@@ -15,10 +15,11 @@ superproject. Read it before changing anything here.
 | `agent.ref` | The os-agent commit the image is built from. Moving it is a deliberate commit |
 | `rootfs/` | Files copied over `/` in the image: the seal unit and script, the bootc install config, branding |
 | `scripts/build.sh` | The one way to build, locally and in CI. Warns when `../agent` is not at `agent.ref` |
+| `scripts/bump-base.sh` | Moves the Kinoite pin to the newest build of the same release. The weekly run of `publish-image.yml` uses it |
 | `scripts/publish-flatpak.sh` | Bundles from the release feed into the signed Flatpak repo. `test-publish-flatpak.sh` tries it with a throwaway key |
 | `scripts/test-image-policy.sh` | Tries a built image's signature policy against a throwaway registry and throwaway cosign keys |
 | `keys/` | The public halves: `mauvely-flatpak.gpg` for the Flatpak remote, `cosign.pub` for the image |
-| `.github/workflows/` | `build.yml` (build and lint, pushes nowhere), and `publish-image.yml` and `publish-flatpak.yml` (by hand only) |
+| `.github/workflows/` | `build.yml` (build and lint, pushes nowhere), and `publish-image.yml` and `publish-flatpak.yml` (by hand, apart from the weekly `next`) |
 | `spikes/` | The P1 spike scripts, reused for VM tests. `proof/` holds what the runs showed |
 
 ## Rules
@@ -27,6 +28,9 @@ superproject. Read it before changing anything here.
   dispatching it is Timur's call (T4 in brief 19). A session never pushes an
   image and never dispatches the workflow. It tries the policy with
   `scripts/test-image-policy.sh`.
+  - **One exception (Timur, 2026-10-16; brief 22):** the workflow's weekly
+    schedule moves the Kinoite pin within the same Fedora release, commits it
+    and publishes `next`. It never publishes `stable`.
 - **The image signature must be one containers/image can find.** cosign v3's
   default bundle format is not, and an image signed that way is refused by
   every device. `publish-image.yml` says why it pins v2. Change the version or
@@ -41,8 +45,9 @@ superproject. Read it before changing anything here.
   - `keys/cosign.pub` (P-256, made 2026-10-14) has the sha256
     `62388839b87ecd602f8d372fd57a6f654cec69635c3ddcef877aefeeda836aee`. A change to it is a key rotation: every device keeps trusting
     the old key until it boots an image that carries the new one.
-- **The base image tag is pinned**, never `latest`. Moving it is a deliberate
-  commit.
+- **The base image tag is pinned**, never `latest`. The weekly schedule moves
+  it to the newest dated build of the same release (`scripts/bump-base.sh`).
+  A new Fedora release is a deliberate commit.
 - **Publishing the Flatpak remote is Timur's call.** A session does not
   dispatch `publish-flatpak.yml`, and tries the script only with a throwaway
   key (`scripts/test-publish-flatpak.sh`).

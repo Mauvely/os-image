@@ -21,8 +21,9 @@ RUN cargo build --release --locked
 
 # ── the image ────────────────────────────────────────────────────────────────
 # The tag is pinned to a dated build, never `latest` or a bare release number.
-# Moving it is a deliberate commit. Fedora 44 is the newest stable release;
-# 45 is still in Beta.
+# publish-image.yml's weekly run moves it to Fedora's newest 44 build
+# (scripts/bump-base.sh). Moving to 45 is a deliberate commit; it is still in
+# Beta.
 FROM quay.io/fedora-ostree-desktops/kinoite:44.20261013.0
 
 LABEL org.opencontainers.image.title="Mauvely OS" \
@@ -33,8 +34,10 @@ LABEL org.opencontainers.image.title="Mauvely OS" \
 
 # Browsers are Flatpaks the plane installs, so the admin controls them. Kinoite
 # ships Firefox as an RPM, with its langpacks.
+# Discover's rpm-ostree backend goes too: the agent stages the image, and a
+# second updater would stage one behind it.
 # dnf leaves a cache, a log and a /run directory that `bootc container lint` flags.
-RUN dnf -y remove firefox firefox-langpacks \
+RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
  && dnf clean all \
  && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log*
 
@@ -76,17 +79,24 @@ RUN python3 -c 'import json; p = "/etc/containers/policy.json"; d = json.load(op
  && python3 -c 'import json; r = json.load(open("/etc/containers/policy.json"))["transports"]["docker"]["ghcr.io/mauvely/os"]; assert r[0]["type"] == "sigstoreSigned", r' \
  && grep -q 'BEGIN PUBLIC KEY' /etc/pki/containers/mauvely-os.pub
 
+# Discover installs Flatpak updates unattended by default. The agent updates
+# them (brief 22, U2).
+RUN sed -i 's/^UseUnattendedUpdates=true$/UseUnattendedUpdates=false/' /etc/xdg/PlasmaDiscoverUpdates \
+ && grep -qx 'UseUnattendedUpdates=false' /etc/xdg/PlasmaDiscoverUpdates
+
 # Units.
 # - enabled: the agent, and the seal that runs before it.
 # - masked: everything in the base that applies an update and reboots, or that
 #   would stage one behind the agent's back. The agent stages and never reboots.
 # - masked: flatpak-add-fedora-repos, which adds the `fedora` OCI remotes on first
 #   boot. Remotes come from the agent, out of the server's check-in answer.
+# - masked: rpm-ostree-countme, which reports each machine to Fedora's mirrors.
 # Plasma Setup stays enabled: in milestone 1 it makes the first local account.
 RUN systemctl enable mauvelyd.service mauvely-seal.service \
  && systemctl mask \
       bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service \
       rpm-ostreed-automatic.timer rpm-ostreed-automatic.service \
-      flatpak-add-fedora-repos.service
+      flatpak-add-fedora-repos.service \
+      rpm-ostree-countme.timer rpm-ostree-countme.service
 
 RUN bootc container lint

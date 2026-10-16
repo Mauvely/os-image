@@ -2,8 +2,14 @@
 # (brief 19, T4). Devices follow one of two tags, `next` or `stable`: a
 # collection picks one, and website-devices names it `${OS_IMAGE_REPO}:<tag>`.
 #
-# By hand only, like the Flatpak remote. Moving a tag is an update that every
-# device following it stages.
+# By hand, except one thing. Moving a tag is an update that every device
+# following it stages.
+#
+# ── The weekly run (Timur, 2026-10-16; brief 22, U1) ────────────────────────
+# Every Monday, scripts/bump-base.sh moves the Kinoite pin to Fedora's newest
+# 44 build; the bump is committed to main and published to `next`. Nothing
+# else is published without a person: the schedule never touches `stable`,
+# and a week with no newer base publishes nothing.
 #
 #   channel=next     build this commit, push :next, sign it by digest, then pull
 #                    it back through the image's own signature policy
@@ -37,6 +43,8 @@ on:
         options: [next, stable]
         default: next
         required: true
+  schedule:
+    - cron: '17 4 * * 1'
 
 concurrency:
   group: publish-image
@@ -52,16 +60,47 @@ env:
   COSIGN_SHA256: c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644
 
 jobs:
-  publish:
-    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
-    timeout-minutes: 90
+  bump:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.bump.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Move the base to Fedora's newest 44 build
+        id: bump
+        run: |
+          tag="$(scripts/bump-base.sh)"
+          if [ -z "$tag" ]; then
+            echo "### No newer Kinoite build; nothing published" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "Move the Kinoite base to $tag" Containerfile
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "### Base moved to \`$tag\`, publishing next" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: bump
+    # A dispatch skips `bump`; the schedule publishes only what it bumped.
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'workflow_dispatch' || needs.bump.outputs.sha != '') }}
+    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
+    timeout-minutes: 90
+    env:
+      CHANNEL: ${{ github.event_name == 'schedule' && 'next' || inputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.sha }}
 
       - name: Check what publishing needs
         id: gate
         env:
-          CHANNEL: ${{ inputs.channel }}
           PRIVATE: ${{ github.event.repository.private }}
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
@@ -114,7 +153,7 @@ jobs:
         # GitHub-hosted only, and that guard is load-bearing: this deletes the
         # Android SDK, .NET, GHC and every Docker image on the machine, which is
         # reclaiming space on a throwaway runner and vandalism on one we own.
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next' && runner.environment == 'github-hosted'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next' && runner.environment == 'github-hosted'
         run: |
           sudo rm -rf /usr/local/lib/android \
                       /usr/share/dotnet \
@@ -127,7 +166,7 @@ jobs:
           df -h / | tail -1
 
       - name: Check out os-agent at the pinned commit
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
         uses: actions/checkout@v4
         with:
           repository: Mauvely/os-agent
@@ -135,12 +174,12 @@ jobs:
           path: agent
 
       - name: Build the image
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
         run: AGENT_DIR=agent TAG=localhost/mauvely-os:publish JOBS=8 scripts/build.sh
 
       - name: Push to next
         id: push
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
         # :next is pushed before it is signed. A device that pulls in the seconds
         # between is refused, reports it at check-in, and stages it next time.
         run: |
@@ -150,7 +189,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Sign by digest
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
@@ -159,7 +198,7 @@ jobs:
         run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$IMAGE@$DIGEST"
 
       - name: Pull it back the way a device does
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'next'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
         # The image's own policy.json and registries.d. Only the key's path is
@@ -180,7 +219,7 @@ jobs:
             echo "### Published to \`$IMAGE:next\`"
             echo
             echo "- digest: \`$DIGEST\`"
-            echo "- os-image: \`$GITHUB_SHA\`"
+            echo "- os-image: \`$(git rev-parse HEAD)\`"
             echo "- agent: \`${{ steps.gate.outputs.agent_ref }}\`"
             echo "- signed, and accepted by the image's own signature policy"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -188,7 +227,7 @@ jobs:
       # ── stable ──────────────────────────────────────────────────────────────
 
       - name: Promote next to stable
-        if: steps.gate.outputs.ready == 'true' && inputs.channel == 'stable'
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'stable'
         # Same repository, same digest, so the signature next carries is
         # already stable's. --preserve-digests refuses rather than re-encode.
         run: |

@@ -1,5 +1,37 @@
 # Handoff
 
+## Brief 22, U1: updates (2026-10-16)
+
+Brief 22 is `Website/website-internal/docs/launch/plans/22-os-updates-sso-vault.md`.
+- **The weekly `next`** (Timur's decision). `publish-image.yml` gains a Monday
+  schedule. Its `bump` job runs `scripts/bump-base.sh`, which moves the Kinoite
+  pin to Fedora's newest `44.<date>.<n>` build. The job commits the bump to
+  `main` as github-actions, and `publish` builds that commit as `next`. A week
+  with no newer base publishes nothing, and the schedule never touches
+  `stable`. A dispatch works as before.
+  - Linted with actionlint 1.7.7.
+  - `bump-base.sh` was run against quay: it moved 44.20261013.0 to
+    44.20261016.0, then printed nothing on a second run. The pin was put back,
+    so the first schedule makes that move.
+  - **The schedule has never run.** Its first run is the next Monday, 04:17 UTC.
+- **Nothing else updates the system:**
+  - `plasma-discover-rpm-ostree` is removed;
+  - Discover's `UseUnattendedUpdates=false`;
+  - `rpm-ostree-countme` (timer and service) is masked.
+  - The polkit rule letting any active user run `rpm-ostree upgrade` is
+    untouched. Without Discover's backend that takes a terminal, and M2's users
+    are not admins.
+- **Built locally** (`localhost/mauvely-os:u1`, lint 14 checks): the backend is
+  gone, the setting reads `false`, both countme units are `masked`.
+- **Left open:** Discover's `fwupd` backend can still apply firmware updates,
+  including `dbx`. A `dbx` change moves PCR 7, so the next boot asks for the
+  recovery key. That belongs with M3's re-seal.
+- **Rechunking: measured, not done.** The Kinoite base is already split into
+  257 layers by Fedora. From 13 to 14 October, 49 of them changed: 902 MB of
+  3,106 MB compressed. From 13 to 16 October, 53 changed: 921 MB. One 281 MB
+  layer changes in every build. Rechunking this image cannot shrink the base's
+  own churn, so a weekly update downloads about 1 GB.
+
 P5 of brief 19 ran on 2026-10-14: the real image, the build CI and the Flatpak
 publishing. The image was built, installed to a blank disk under Secure Boot and
 a TPM, rebooted and checked. `build.yml` has run once on GitHub, on the push of
@@ -195,9 +227,9 @@ journal showed `tuned` AVCs on `chcon`. Both are the base image, not this change
   someone runs `fedora-third-party enable`.
 - **The image is 7.47 GB on disk, 0.1 GB more than the base**, because removing
   Firefox leaves its files in the base layers and adds a rewritten RPM database.
-  Devices pull the full layers. Rechunking would fix it, and is not done.
+  An update pulls only changed layers (measured above, under brief 22).
 
-## What Plasma Discover still does with OS updates (not fixed, as asked)
+## What Plasma Discover did with OS updates (closed by brief 22, U1, above)
 
 Read from the image, **not seen running**, since no user session was started:
 - `/etc/xdg/PlasmaDiscoverUpdates` has `UseUnattendedUpdates=true`, and
@@ -244,7 +276,6 @@ once that is installed.
   The first publish ran the same day (below).
 - ~~**T4's first publish**~~ Done 2026-10-14: `next` and `stable` are
   published, signed and public.
-- Decide: Discover, and `rpm-ostree-countme.timer`, above.
 - **The remote is live, with one wrong ref in it.** Timur dispatched
   `publish-flatpak.yml` on 2026-10-14 at 18:49 UTC (run 38618413513), before
   Compose 0.5.4 was in the feed and before the id check existed. A client
