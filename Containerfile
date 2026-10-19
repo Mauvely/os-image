@@ -24,7 +24,7 @@ RUN cargo build --release --locked
 # publish-image.yml's weekly run moves it to Fedora's newest 44 build
 # (scripts/bump-base.sh). Moving to 45 is a deliberate commit; it is still in
 # Beta.
-FROM quay.io/fedora-ostree-desktops/kinoite:44.20261013.0
+FROM quay.io/fedora-ostree-desktops/kinoite:44.20261019.0
 
 LABEL org.opencontainers.image.title="Mauvely OS" \
       org.opencontainers.image.source="https://github.com/Mauvely/os-image" \
