@@ -1,0 +1,14 @@
+[Settings]
+FallbackTheme=default
+
+[AdaptiveTransparency]
+enabled=true
+
+[BlurBehindEffect]
+enabled=true
+
+[Wallpaper]
+defaultWallpaperTheme=Mauvely
+defaultFileSuffix=.png
+defaultWidth=3840
+defaultHeight=2160

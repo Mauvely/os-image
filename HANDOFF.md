@@ -1,5 +1,62 @@
 # Handoff
 
+## The Mauvely look, phase 1 (brief 25; prototype in `design/plasma/`)
+
+Prototyped live on the VM on 2026-10-21. Timur's decisions: day/night
+switching, Inter, re-apply on change, and two locks (the look; the panel and
+widgets). Not in the image yet. Phase 2 packages it.
+
+**Settings that phase 2 must reproduce:**
+- **Window decoration:**
+  - kwinrc `[org.kde.kdecoration2]`: `library=org.kde.breeze`,
+    `BorderSize=None`, `BorderSizeAuto=false`, `ButtonsOnLeft=`,
+    `ButtonsOnRight=IAX`;
+  - breezerc: `[Windeco] TitleAlignment=AlignCenterFullWidth`,
+    `[Common] RoundedCorners=true`, `OutlineEnabled=true`,
+    `ShadowSize=ShadowLarge`, `[Style] MenuOpacity=70`.
+- **Day and night:** kdeglobals `[KDE] AutomaticLookAndFeel=true`,
+  `DefaultLightLookAndFeel=com.mauvely.light.desktop`,
+  `DefaultDarkLookAndFeel=com.mauvely.dark.desktop`. The schedule is
+  `knighttimerc`, which defaults to the location.
+- **Fonts, in each theme's defaults:** Inter 10 for `font`, `menuFont` and
+  `toolBarFont`; Inter 8 for `smallestReadableFont`; JetBrains Mono 10 for
+  `fixed`; Inter 600 for `[WM] activeFont`.
+  - A Plasma 6.7 bug also needs `[kdeglobals][WM] font=`: the theme loader
+    looks for the font keys in the wrong group.
+- **The panel** (`layouts/org.kde.plasma.desktop-layout.js`): one per screen,
+  `lengthMode=fill`, floating, 48 px, translucent. In order: spacer, Kickoff
+  (grid favourites, `icon=com.mauvely.start`), icon tasks with `fill=false`,
+  spacer, tray, clock, show-desktop.
+- **Blur:**
+  - the Plasma style "mauvely" falls back to Breeze, except
+    `dialogs/background`, `widgets/panel-background` and `widgets/tooltip` at
+    0.7 opacity;
+  - kwinrc `[Plugins] blurEnabled=true` is needed only on software rendering.
+
+**Spikes:**
+- **Corners: use Breeze's own** (`RoundedCorners`, all four corners once
+  borders are off). The radius is fixed at ~5 px; Windows 11 is 8 px.
+  - Aurorae can't round the window's content.
+  - KDE-Rounded-Corners breaks with every KWin update, and the base moves
+    weekly.
+- **Taskbar: spacers in one full-width panel.** Fit-content docks overlapped
+  the tray at 1280×800. A screen plugged in after the first login gets no
+  panel; phase 2 decides that.
+
+**Phase 2 must also:**
+- Override Fedora's `/usr/share/kde-settings/kde-profile/default/xdg/`
+  defaults (`kicker-extra-favoritesrc` with `IgnoreDefaults=true`, Noto Sans,
+  the Fedora global theme, the lock-screen wallpaper). Ship the image's own.
+- Add the packages `rsms-inter-fonts` and `jetbrains-mono-fonts`.
+
+**Spikes 3 and 4 (the admin lock):**
+- Plasma 6 has no "lock widgets" a person can't lift. Scripting
+  `panel.locked` is undone by them. An admin lock needs Kiosk `[$i]`, or
+  `[KDE Action Restrictions] plasma/plasmashell/unlockedDesktop=false`.
+  Neither tried.
+- `~/.config/kdedefaults/` sits first in `XDG_CONFIG_DIRS`, so a policy
+  directory added later needs `[$i]` to win.
+
 ## The sign-in broker in the image (brief 22, S2; 2026-10-21)
 
 `agent.ref` is os-agent `c6e1d21`: `mauvely-session` now carries the sign-in
