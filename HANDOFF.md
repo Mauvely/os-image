@@ -1,5 +1,17 @@
 # Handoff
 
+## The sign-in broker in the image (brief 22, S2; 2026-10-21)
+
+`agent.ref` is os-agent `c6e1d21`: `mauvely-session` now carries the sign-in
+broker (os-agent `docs/broker.md`), reviewed adversarially and fixed.
+`rootfs/usr/share/user-tmpfiles.d/mauvely.conf` makes `$XDG_RUNTIME_DIR/mauvely`
+(0700) at login, because Flatpak shares `xdg-run/mauvely` into an app only if
+it exists when the app starts. `systemd-creds.socket` is active on the image
+already (sockets.target), and a same-user `systemd-creds --user` round trip
+works on the VM. Built and linted locally; never booted. Linking for real
+needs Timur: a Plasma login on a machine on `next`, and approving the code in
+his own signed-in browser.
+
 ## /boot was too small for an update (2026-10-21, Timur's Proxmox VM)
 
 **Every installed machine could never take an image update with a new
