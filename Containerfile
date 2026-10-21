@@ -104,4 +104,15 @@ RUN systemctl enable mauvelyd.service mauvely-seal.service \
       flatpak-add-fedora-repos.service \
       rpm-ostree-countme.timer rpm-ostree-countme.service
 
+# The initramfs, rebuilt with rootfs/usr/lib/dracut/dracut.conf.d/90-mauvely-
+# initramfs.conf so that two kernels fit in /boot. Fails the build past 150 MB,
+# which is about where an update stops fitting next to the booted kernel, and
+# without the ostree module, without which nothing boots.
+RUN kver="$(ls /usr/lib/modules)" \
+ && dracut --force --no-hostonly --reproducible --kver "$kver" "/usr/lib/modules/$kver/initramfs.img" \
+ && lsinitrd -m "/usr/lib/modules/$kver/initramfs.img" | grep -qx ostree \
+ && size="$(stat -c %s "/usr/lib/modules/$kver/initramfs.img")" \
+ && echo "initramfs: $size bytes" \
+ && [ "$size" -lt 157286400 ]
+
 RUN bootc container lint

@@ -1,5 +1,35 @@
 # Handoff
 
+## /boot was too small for an update (2026-10-21, Timur's Proxmox VM)
+
+**Every installed machine could never take an image update with a new
+kernel.** bootc's `to-disk` makes a 510 MB `/boot` (446 MB usable), Kinoite's
+generic initramfs is 238 MB (NVIDIA firmware alone is 104 MB), so a kernel
+set is ~257 MB and two never fit. The VM's move to `next` (7.2.9 → 7.2.11)
+failed at shutdown with "Installing kernel: regfile copy: No space left on
+device", and the agent staged it again every boot.
+
+- **Fix:** `rootfs/usr/lib/dracut/dracut.conf.d/90-mauvely-initramfs.conf`
+  drops the NVIDIA and AMD display drivers (and so their firmware) from the
+  initramfs; the Containerfile rebuilds it. 96.8 MB. On those machines the
+  splash and the recovery prompt use simpledrm until the real driver loads
+  from the root filesystem.
+- **The trap, hit once:** a plain `dracut` leaves out the `ostree` module that
+  Fedora's compose adds with `--add ostree`. The initramfs then unlocks the
+  disk and fails at "Switch Root" into emergency mode. The config adds the
+  module, and the build fails without it (`lsinitrd -m | grep -qx ostree`) or
+  past 150 MB.
+- **Proven on the VM** (local build `slim3` from a LAN registry, agent
+  masked): the switch from the 257 MB set finalised at shutdown with both sets
+  in `/boot` (402 of 446 MB), the next boot unlocked from the TPM with no
+  prompt, no unit failed, tuned and tuned-ppd ran. Not tried: real NVIDIA or
+  AMD hardware, Secure Boot changes that need the recovery prompt.
+- **Recovering a machine stuck on a bad deployment:** hold F8 at boot for
+  GRUB's menu and pick `ostree:1`.
+- **Not done:** a bigger `/boot` for new installs. bootc's `to-disk` has no
+  option for it, so it would mean the installer partitioning itself and
+  using `to-filesystem`.
+
 ## Brief 22, U2: mauvely-session in the image (2026-10-16)
 
 - **`agent.ref` → os-agent `d279540`** (`d52c86f`, plus a fix: a staged deployment of the booted image, as mauvely-seal makes, is not announced). mauvelyd now updates system Flatpaks
