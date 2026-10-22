@@ -1,0 +1,561 @@
+Mauvely OS: let a PAM module ask a second question after the password
+
+Plasma Login Manager answers every PAM prompt with the password the greeter sent
+(Display::slotRequestChanged: one prompt gets the password, two get the user name
+and the password). This lets a module ask something else after the password
+-- a code, a PIN -- and shows it, with the module's own text, in the greeter.
+
+Against: upstream plasma-login-manager v6.8.1 (2026-10-18), for when Fedora's
+plasma-login-manager moves from 6.7.x to 6.8. It is the same change as
+plm-second-prompt.patch (6.7.5, Fedora f44) with the three hunks that 6.8
+already has or moved dropped or re-made: PAM messages are shown in Main.qml,
+frontend/greeter/backend/Messages.h is gone (one common/Messages.h), and
+GreeterState.qml's properties moved. Applies to v6.8.1 with `git apply`.
+
+What changes, in the order a question travels:
+  helper  PamBackend: inside pam_authenticate(), the first secret prompt is the
+          password whatever its text; a later prompt that does not look like the
+          password again is a LOGIN_CHALLENGE (new AuthPrompt::Type).
+  daemon  Display::slotRequestChanged sends a LOGIN_CHALLENGE to the greeter
+          (DaemonMessages::Prompt: QString message, quint32 hidden) and waits;
+          GreeterMessages::Respond (QString) answers it (Display::respond).
+  greeter GreeterProxy: prompt() signal, respond() slot. GreeterState/Login.qml:
+          a second field in the place of the password box, labelled with the
+          module's text. Main.qml: the input is given back when a prompt arrives.
+
+An empty answer refuses the question. A module should use PAM_TEXT_INFO for
+anything that is not the verdict: PAM_ERROR_MSG still tells the greeter the login
+failed. `plasma-login-greeter --test` with PLASMALOGIN_MOCK_CODE=1 shows the
+second field without PAM: password "mypassword", code "123456".
+---
+diff --git a/src/auth/AuthPrompt.h b/src/auth/AuthPrompt.h
+index a0712b1b..83e43134 100644
+--- a/src/auth/AuthPrompt.h
++++ b/src/auth/AuthPrompt.h
+@@ -46,7 +46,8 @@ public:
+         CHANGE_NEW, ///< On changing the password: The new one
+         CHANGE_REPEAT, ///< On changing the password: The new one, repeated
+         LOGIN_USER = 0x0080, ///< On logging in: The username
+-        LOGIN_PASSWORD ///< On logging in: The password
++        LOGIN_PASSWORD, ///< On logging in: The password
++        LOGIN_CHALLENGE ///< On logging in: Any later question of a PAM module (a code, a PIN), put to the person
+     };
+     Q_ENUM(Type)
+     /**
+diff --git a/src/common/Messages.h b/src/common/Messages.h
+index d4d0be11..fc32ebb7 100644
+--- a/src/common/Messages.h
++++ b/src/common/Messages.h
+@@ -24,12 +24,14 @@ namespace PLASMALOGIN
+ enum class GreeterMessages {
+     Connect = 0,
+     Login,
++    Respond, // the answer to a Prompt: QString
+ };
+ 
+ enum class DaemonMessages {
+     LoginSucceeded,
+     LoginFailed,
+     InformationMessage,
++    Prompt, // a PAM module asks the person: QString message, quint32 hidden
+ };
+ 
+ enum class SessionType {
+diff --git a/src/daemon/Display.cpp b/src/daemon/Display.cpp
+index 5963e59c..c7cdcb4a 100644
+--- a/src/daemon/Display.cpp
++++ b/src/daemon/Display.cpp
+@@ -67,6 +67,7 @@ Display::Display(Seat *parent)
+ 
+     // connect login signal
+     connect(m_socketServer, &SocketServer::login, this, &Display::login);
++    connect(m_socketServer, &SocketServer::respond, this, &Display::respond);
+ 
+     // connect login result signals
+     connect(this, &Display::loginFailed, m_socketServer, &SocketServer::loginFailed);
+@@ -222,6 +223,21 @@ void Display::login(QLocalSocket *socket, const QString &user, const QString &pa
+     startAuth(user, password, session);
+ }
+ 
++void Display::respond(QLocalSocket *socket, const QString &answer)
++{
++    // Only the answer to a question asked just now, and only from the greeter that was asked.
++    if (!m_challengePending || socket != m_socket) {
++        return;
++    }
++    m_challengePending = false;
++
++    const QList<AuthPrompt *> prompts = m_auth->request()->prompts();
++    if (prompts.length() == 1) {
++        prompts[0]->setResponse(answer.toLocal8Bit());
++        m_auth->request()->done();
++    }
++}
++
+ bool Display::startAuth(const QString &user, const QString &password, const Session &session)
+ {
+     qDebug() << "start auth" << "user" << session.isValid() << session.exec();
+@@ -296,6 +312,8 @@ bool Display::startAuth(const QString &user, const QString &password, const Sess
+ 
+ void Display::slotAuthenticationFinished(const QString &user, bool success)
+ {
++    m_challengePending = false;
++
+     if (m_auth->autologin() && !success) {
+         handleAutologinFailure();
+         return;
+@@ -357,6 +375,19 @@ void Display::slotHelperFinished(Auth::HelperExitStatus status)
+ 
+ void Display::slotRequestChanged()
+ {
++    const QList<AuthPrompt *> prompts = m_auth->request()->prompts();
++    if (prompts.length() == 1 && prompts[0]->type() == AuthPrompt::LOGIN_CHALLENGE) {
++        // A PAM module asks something that is not the password: a code, a PIN. Ask the person.
++        // With nobody to ask, as in autologin, answer nothing and let the module refuse.
++        if (!m_socket) {
++            m_auth->request()->done();
++            return;
++        }
++        m_challengePending = true;
++        m_socketServer->prompt(m_socket, prompts[0]->message(), prompts[0]->hidden());
++        return;
++    }
++
+     if (m_auth->request()->prompts().length() == 1) {
+         m_auth->request()->prompts()[0]->setResponse(qPrintable(m_passPhrase));
+         m_auth->request()->done();
+diff --git a/src/daemon/Display.h b/src/daemon/Display.h
+index 2861ece5..436f0ae6 100644
+--- a/src/daemon/Display.h
++++ b/src/daemon/Display.h
+@@ -61,6 +61,7 @@ public slots:
+     void stop();
+ 
+     void login(QLocalSocket *socket, const QString &user, const QString &password, const Session &session);
++    void respond(QLocalSocket *socket, const QString &answer);
+     void displayServerStarted();
+ 
+ signals:
+@@ -81,6 +82,7 @@ private:
+     VirtualTerminal::Terminal m_sessionTerminalId;
+ 
+     QString m_passPhrase;
++    bool m_challengePending{false};
+     QString m_sessionName;
+     QString m_reuseSessionId;
+ 
+diff --git a/src/daemon/SocketServer.cpp b/src/daemon/SocketServer.cpp
+index 7ac0fe51..4d8b09f7 100644
+--- a/src/daemon/SocketServer.cpp
++++ b/src/daemon/SocketServer.cpp
+@@ -144,6 +144,15 @@ void SocketServer::readyRead()
+             // emit signal
+             emit login(socket, user, password, session);
+         } break;
++        case GreeterMessages::Respond: {
++            // log message, never the answer
++            qDebug() << "Message received from greeter: Respond";
++
++            QString answer;
++            input >> answer;
++
++            emit respond(socket, answer);
++        } break;
+         default: {
+             // log message
+             qWarning() << "Unknown message" << message;
+@@ -166,6 +175,11 @@ void SocketServer::informationMessage(QLocalSocket *socket, const QString &messa
+ {
+     SocketWriter(socket) << quint32(DaemonMessages::InformationMessage) << message;
+ }
++
++void SocketServer::prompt(QLocalSocket *socket, const QString &message, bool hidden)
++{
++    SocketWriter(socket) << quint32(DaemonMessages::Prompt) << message << quint32(hidden ? 1 : 0);
++}
+ }
+ 
+ #include "moc_SocketServer.cpp"
+diff --git a/src/daemon/SocketServer.h b/src/daemon/SocketServer.h
+index baba7b56..67d304c1 100644
+--- a/src/daemon/SocketServer.h
++++ b/src/daemon/SocketServer.h
+@@ -46,11 +46,13 @@ private slots:
+ 
+ public slots:
+     void informationMessage(QLocalSocket *socket, const QString &message);
++    void prompt(QLocalSocket *socket, const QString &message, bool hidden);
+     void loginFailed(QLocalSocket *socket);
+     void loginSucceeded(QLocalSocket *socket);
+ 
+ signals:
+     void login(QLocalSocket *socket, const QString &user, const QString &password, const Session &session);
++    void respond(QLocalSocket *socket, const QString &answer);
+     void connected();
+ 
+ private:
+diff --git a/src/frontend/greeter/backend/GreeterProxy.cpp b/src/frontend/greeter/backend/GreeterProxy.cpp
+index 9e824c34..fafbe8ee 100644
+--- a/src/frontend/greeter/backend/GreeterProxy.cpp
++++ b/src/frontend/greeter/backend/GreeterProxy.cpp
+@@ -61,6 +61,11 @@ void GreeterProxy::login(const QString &user, const QString &password, const PLA
+     SocketWriter(d->socket) << quint32(GreeterMessages::Login) << user << password << static_cast<uint32_t>(sessionType) << sessionFileName;
+ }
+ 
++void GreeterProxy::respond(const QString &answer) const
++{
++    SocketWriter(d->socket) << quint32(GreeterMessages::Respond) << answer;
++}
++
+ void GreeterProxy::connected()
+ {
+     // log connection
+@@ -115,6 +120,14 @@ void GreeterProxy::readyRead()
+             qDebug() << "Information Message received from daemon: " << message;
+             emit informationMessage(message);
+         } break;
++        case DaemonMessages::Prompt: {
++            QString message;
++            quint32 hidden;
++            input >> message >> hidden;
++
++            qDebug() << "Prompt received from daemon:" << message << hidden;
++            emit prompt(message, hidden != 0);
++        } break;
+         default: {
+             // log message
+             qWarning() << "Unknown message received from daemon.";
+diff --git a/src/frontend/greeter/backend/GreeterProxy.h b/src/frontend/greeter/backend/GreeterProxy.h
+index e6c78512..6e20bad8 100644
+--- a/src/frontend/greeter/backend/GreeterProxy.h
++++ b/src/frontend/greeter/backend/GreeterProxy.h
+@@ -41,6 +41,7 @@ public:
+ 
+ public slots:
+     void login(const QString &user, const QString &password, const PLASMALOGIN::SessionType sessionType, const QString &sessionFileName) const;
++    void respond(const QString &answer) const;
+ 
+ private slots:
+     void connected();
+@@ -50,6 +51,7 @@ private slots:
+ 
+ signals:
+     void informationMessage(const QString &message);
++    void prompt(const QString &message, bool hidden);
+ 
+     void socketDisconnected();
+     void loginFailed();
+diff --git a/src/frontend/greeter/mockbackend/MockGreeterProxy.cpp b/src/frontend/greeter/mockbackend/MockGreeterProxy.cpp
+index f5ea2abd..d28bb0de 100644
+--- a/src/frontend/greeter/mockbackend/MockGreeterProxy.cpp
++++ b/src/frontend/greeter/mockbackend/MockGreeterProxy.cpp
+@@ -32,6 +32,26 @@ void MockGreeterProxy::login(const QString &user, const QString &password, const
+     qDebug().nospace() << "Login " << (success ? "success" : "failure") << " with user " << user << ", password " << password << ", session " << sessionTypeName
+                        << " " << sessionFileName;
+ 
++    if (success && qEnvironmentVariableIsSet("PLASMALOGIN_MOCK_CODE")) {
++        // ask a second question, as a PAM module would; "123456" is the answer
++        QTimer::singleShot(100, this, [this] {
++            Q_EMIT const_cast<MockGreeterProxy *>(this)->prompt(QStringLiteral("Code: "), true);
++        });
++    } else if (success) {
++        QTimer::singleShot(100, this, &MockGreeterProxy::loginSucceeded);
++        QTimer::singleShot(800, []() {
++            QCoreApplication::quit();
++        });
++    } else {
++        QTimer::singleShot(100, this, &MockGreeterProxy::loginFailed);
++    }
++}
++
++void MockGreeterProxy::respond(const QString &answer) const
++{
++    const bool success = (answer == s_mockCode);
++    qDebug().noquote() << QStringLiteral("Answer %1").arg(success ? QStringLiteral("accepted") : QStringLiteral("refused"));
++
+     if (success) {
+         QTimer::singleShot(100, this, &MockGreeterProxy::loginSucceeded);
+         QTimer::singleShot(800, []() {
+diff --git a/src/frontend/greeter/mockbackend/MockGreeterProxy.h b/src/frontend/greeter/mockbackend/MockGreeterProxy.h
+index c327ea4c..e71db120 100644
+--- a/src/frontend/greeter/mockbackend/MockGreeterProxy.h
++++ b/src/frontend/greeter/mockbackend/MockGreeterProxy.h
+@@ -16,9 +16,11 @@ public:
+     MockGreeterProxy();
+ public Q_SLOTS:
+     void login(const QString &user, const QString &password, const PLASMALOGIN::SessionType sessionType, const QString &sessionFileName) const;
++    void respond(const QString &answer) const;
+ 
+ Q_SIGNALS:
+     void informationMessage(const QString &message);
++    void prompt(const QString &message, bool hidden);
+ 
+     void socketDisconnected();
+     void loginFailed();
+@@ -26,4 +28,5 @@ Q_SIGNALS:
+ 
+ private:
+     static constexpr QLatin1String s_mockPassword = QLatin1String("mypassword");
++    static constexpr QLatin1String s_mockCode = QLatin1String("123456");
+ };
+diff --git a/src/frontend/greeter/qml/GreeterState.qml b/src/frontend/greeter/qml/GreeterState.qml
+index f3233e14..8b9ee707 100644
+--- a/src/frontend/greeter/qml/GreeterState.qml
++++ b/src/frontend/greeter/qml/GreeterState.qml
+@@ -91,11 +91,21 @@ Item {
+ 
+     property bool showPassword: false
+ 
++    // A PAM module asks something after the password: a code, a PIN
++    property bool challengeActive: false
++    property string challengeMessage: ""
++    property bool challengeHidden: true
++    // PAM prompts end in ": "
++    readonly property string challengeLabel: challengeMessage.replace(/[:\s]+$/, "")
++
+     // Shared functionality
+ 
+     property bool greeterHasSessionButtonPopup: false
+     readonly property bool inhibitGreeterTimeout: {
+-        if (greeterState.loginState === PlasmaLogin.GreeterState.LoginState.UserList && greeterState.userListPassword.length > 0) {
++        if (greeterState.challengeActive) {
++            // A PAM module is waiting for an answer
++            return true;
++        } else if (greeterState.loginState === PlasmaLogin.GreeterState.LoginState.UserList && greeterState.userListPassword.length > 0) {
+             // We're on the user list and a password is entered
+             return true;
+         } else if (greeterState.loginState === PlasmaLogin.GreeterState.UserPrompt && greeterState.userPromptPassword.length > 0) {
+@@ -211,6 +221,43 @@ Item {
+         }
+     }
+ 
++    // An empty answer refuses the question; the module then fails the login
++    function answerChallenge(answer: string): void {
++        if (!challengeActive) {
++            return;
++        }
++        challengeActive = false;
++        challengeTimer.stop();
++        PlasmaLogin.Authenticator.respond(answer);
++    }
++
++    Timer {
++        id: challengeTimer
++        interval: 180000
++        onTriggered: greeterState.answerChallenge("")
++    }
++
++    Connections {
++        target: PlasmaLogin.Authenticator
++
++        function onPrompt(message, hidden) {
++            greeterState.challengeMessage = message;
++            greeterState.challengeHidden = hidden;
++            greeterState.challengeActive = true;
++            challengeTimer.restart();
++        }
++
++        function onLoginFailed() {
++            greeterState.challengeActive = false;
++            challengeTimer.stop();
++        }
++
++        function onLoginSucceeded() {
++            greeterState.challengeActive = false;
++            challengeTimer.stop();
++        }
++    }
++
+     Connections {
+         target: PlasmaLogin.Authenticator
+ 
+diff --git a/src/frontend/greeter/qml/Login.qml b/src/frontend/greeter/qml/Login.qml
+index e222c884..0fe22591 100644
+--- a/src/frontend/greeter/qml/Login.qml
++++ b/src/frontend/greeter/qml/Login.qml
+@@ -61,6 +61,11 @@ SessionManagementScreen {
+      * If username field is visible, it will be taken from that, otherwise from the "name" property of the currentIndex
+      */
+     function startLogin() {
++        if (PlasmaLogin.GreeterState.challengeActive) {
++            answerChallenge();
++            return;
++        }
++
+         const username = showUsernamePrompt ? userNameInput.text : userList.selectedUser
+         const password = passwordBox.text
+ 
+@@ -77,6 +82,19 @@ SessionManagementScreen {
+         loginRequest(username, password);
+     }
+ 
++    /*
++     * A PAM module asked a second question and the answer has been typed
++     */
++    function answerChallenge() {
++        const answer = challengeBox.text;
++        challengeBox.clear();
++
++        mainStack.enabled = false
++        userListComponent.userList.opacity = 0.75
++        loginButton.forceActiveFocus();
++        PlasmaLogin.GreeterState.answerChallenge(answer);
++    }
++
+     PlasmaComponents3.TextField {
+         id: userNameInput
+         font.pointSize: fontSize + 1
+@@ -84,6 +102,7 @@ SessionManagementScreen {
+ 
+         text: ""
+         visible: showUsernamePrompt
++        enabled: !PlasmaLogin.GreeterState.challengeActive
+         focus: showUsernamePrompt
+         placeholderText: i18nd("plasma_login", "Username")
+ 
+@@ -111,7 +130,7 @@ SessionManagementScreen {
+                 }
+             }
+ 
+-            visible: root.showUsernamePrompt || userList.currentItem.needsPassword
++            visible: !PlasmaLogin.GreeterState.challengeActive && (root.showUsernamePrompt || userList.currentItem.needsPassword)
+ 
+             Keys.onEscapePressed: {
+                 mainStack.currentItem.forceActiveFocus();
+@@ -140,6 +159,36 @@ SessionManagementScreen {
+             }
+         }
+ 
++        // The answer to a second question of a PAM module, in the place of the password
++        PlasmaExtras.PasswordField {
++            id: challengeBox
++            font.pointSize: fontSize + 1
++            Layout.fillWidth: true
++
++            visible: PlasmaLogin.GreeterState.challengeActive
++            showPassword: !PlasmaLogin.GreeterState.challengeHidden
++            placeholderText: PlasmaLogin.GreeterState.challengeLabel || i18nd("plasma_login", "Code")
++
++            onAccepted: {
++                if (root.loginScreenUiVisible) {
++                    startLogin();
++                }
++            }
++
++            Keys.onEscapePressed: PlasmaLogin.GreeterState.answerChallenge("")
++
++            Connections {
++                target: PlasmaLogin.GreeterState
++
++                function onChallengeActiveChanged() {
++                    if (PlasmaLogin.GreeterState.challengeActive) {
++                        challengeBox.clear();
++                        Qt.callLater(() => challengeBox.forceActiveFocus(Qt.TabFocusReason));
++                    }
++                }
++            }
++        }
++
+         PlasmaComponents3.Button {
+             id: loginButton
+             Accessible.name: i18nd("plasma_login", "Log In")
+diff --git a/src/frontend/greeter/qml/Main.qml b/src/frontend/greeter/qml/Main.qml
+index ae440c0d..f9031398 100644
+--- a/src/frontend/greeter/qml/Main.qml
++++ b/src/frontend/greeter/qml/Main.qml
+@@ -377,6 +377,12 @@ Item {
+             notificationMessage = message;
+         }
+ 
++        // A PAM module asks a second question: give the input back, as for a failure, so it can be answered
++        function onPrompt(message, hidden) {
++            mainStack.enabled = true;
++            userListComponent.userList.opacity = 1;
++        }
++
+         function onLoginFailed() {
+             notificationMessage = i18nd("plasma_login", "Login Failed");
+             // Only failures time out; started here rather than on every change.
+diff --git a/src/helper/backend/PamBackend.cpp b/src/helper/backend/PamBackend.cpp
+index 50f386d7..6d4a6fcf 100644
+--- a/src/helper/backend/PamBackend.cpp
++++ b/src/helper/backend/PamBackend.cpp
+@@ -40,8 +40,18 @@ PamData::PamData()
+ {
+ }
+ 
++void PamData::setAuthenticating(bool on)
++{
++    m_authenticating = on;
++}
++
+ AuthPrompt::Type PamData::detectPrompt(const struct pam_message *msg) const
+ {
++    // The first secret prompt is the password, whatever its text (it may be translated).
++    // A later prompt of pam_authenticate() that does not look like the password again is a
++    // question for the person. Everything else is classified as it always was.
++    const bool question = m_authenticating && m_passwordGiven;
++
+     if (msg->msg_style == PAM_PROMPT_ECHO_OFF) {
+         QString message = QString::fromLocal8Bit(msg->msg);
+         if ((QRegularExpression(QStringLiteral("\\bpassword\\b"), QRegularExpression::CaseInsensitiveOption)).match(message).hasMatch()) {
+@@ -57,6 +67,11 @@ AuthPrompt::Type PamData::detectPrompt(const struct pam_message *msg) const
+                 return AuthPrompt::LOGIN_PASSWORD;
+             }
+         }
++        if (question && message != m_passwordPrompt) {
++            return AuthPrompt::LOGIN_CHALLENGE;
++        }
++    } else if (question && msg->msg_style == PAM_PROMPT_ECHO_ON) {
++        return AuthPrompt::LOGIN_CHALLENGE;
+     } else {
+         return AuthPrompt::LOGIN_USER;
+     }
+@@ -164,6 +179,10 @@ QByteArray PamData::getResponse(const struct pam_message *msg)
+     if (m_currentRequest.prompts.length() == 0) {
+         m_sent = false;
+     }
++    if (msg->msg_style == PAM_PROMPT_ECHO_OFF && !m_passwordGiven) {
++        m_passwordGiven = true;
++        m_passwordPrompt = QString::fromLocal8Bit(msg->msg);
++    }
+     return response;
+ }
+ 
+@@ -231,7 +250,10 @@ bool PamBackend::start(const QString &user)
+ 
+ bool PamBackend::authenticate()
+ {
+-    if (!m_pam->authenticate()) {
++    m_data->setAuthenticating(true);
++    const bool authenticated = m_pam->authenticate();
++    m_data->setAuthenticating(false);
++    if (!authenticated) {
+         m_app->error(m_pam->errorString(), Auth::ERROR_AUTHENTICATION);
+         return false;
+     }
+diff --git a/src/helper/backend/PamBackend.h b/src/helper/backend/PamBackend.h
+index e150e76f..737f3551 100644
+--- a/src/helper/backend/PamBackend.h
++++ b/src/helper/backend/PamBackend.h
+@@ -27,6 +27,7 @@ public:
+     PamData();
+ 
+     bool insertPrompt(const struct pam_message *msg, bool predict = true);
++    void setAuthenticating(bool on);
+     Auth::Info handleInfo(const struct pam_message *msg, bool predict);
+ 
+     const Request &getRequest() const;
+@@ -42,6 +43,12 @@ private:
+ 
+     bool m_sent{false};
+     Request m_currentRequest{};
++
++    // Only inside pam_authenticate(), and only after the first secret prompt has been
++    // answered with the password, can a later prompt be a question for the person.
++    bool m_authenticating{false};
++    bool m_passwordGiven{false};
++    QString m_passwordPrompt;
+ };
+ 
+ class PamBackend : public QObject

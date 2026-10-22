@@ -1,0 +1,100 @@
+Mauvely OS: show a second PAM question on the lock screen
+
+kscreenlocker's PAM worker (greeter/pamauthenticator.cpp) already passes every
+prompt, echo-on or off, and every PAM_TEXT_INFO/PAM_ERROR_MSG to QML. The theme
+(plasma-desktop desktoppackage/contents/lockscreen) shows one box labelled
+"Password" and answers whichever prompt is open, so a second question works but
+the box still holds the password and does not say what is asked. This empties
+the box and uses the module's own words as the label, from the second secret
+prompt of an unlock attempt on.
+
+Not needed while the lock screen asks for the password only (M2 plan: pam_mauvely
+in service "kde" does not ask for a code). Apply on the image at build time,
+where the files are plain QML in /usr:
+  patch -p1 -d /usr/share/plasma/shells/org.kde.plasma.desktop < this-file
+Against plasma-desktop 6.7.5-1.fc44 (the files are byte-identical to the v6.7.5 tag).
+---
+diff --git a/contents/lockscreen/LockScreenUi.qml b/contents/lockscreen/LockScreenUi.qml
+index 4640fa1..06786bf 100644
+--- a/contents/lockscreen/LockScreenUi.qml
++++ b/contents/lockscreen/LockScreenUi.qml
+@@ -39,12 +39,19 @@ Item {
+     Kirigami.Theme.inherit: false
+     Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+ 
++    // A PAM module asks a second question after the password (a code, a PIN): the box
++    // must be empty for it, and say what is asked
++    property bool answered: false
++    property string secretPrompt: ""
++
+     Connections {
+         target: authenticator
+         function onFailed(kind) {
+             if (kind != 0) { // if this is coming from the noninteractive authenticators
+                 return;
+             }
++            lockScreenUi.answered = false;
++            lockScreenUi.secretPrompt = "";
+             const msg = i18ndc("plasma_shell_org.kde.plasma.desktop", "@info:status", "Unlocking failed");
+             lockScreenUi.handleMessage(msg);
+             graceLockTimer.restart();
+@@ -79,6 +86,10 @@ Item {
+         }
+         function onPromptForSecretChanged(msg) {
+             mainBlock.showPassword = false;
++            if (lockScreenUi.answered) {
++                root.clearPassword();
++                lockScreenUi.secretPrompt = authenticator.promptForSecret;
++            }
+             mainBlock.mainPasswordBox.forceActiveFocus();
+         }
+     }
+@@ -181,6 +192,8 @@ Item {
+             interval: 3000
+             onTriggered: {
+                 root.clearPassword();
++                lockScreenUi.answered = false;
++                lockScreenUi.secretPrompt = "";
+                 authenticator.startAuthenticating();
+             }
+         }
+@@ -277,7 +290,7 @@ Item {
+                     }
+                 }
+                 userListModel: users
+-
++                secretPrompt: lockScreenUi.secretPrompt
+ 
+                 notificationMessage: {
+                     const parts = [];
+@@ -291,6 +304,7 @@ Item {
+                 }
+ 
+                 onPasswordResult: password => {
++                    lockScreenUi.answered = true;
+                     authenticator.respond(password)
+                 }
+ 
+diff --git a/contents/lockscreen/MainBlock.qml b/contents/lockscreen/MainBlock.qml
+index 5dab857..2f7d1ba 100644
+--- a/contents/lockscreen/MainBlock.qml
++++ b/contents/lockscreen/MainBlock.qml
+@@ -21,6 +21,8 @@ SessionManagementScreen {
+ 
+     readonly property alias mainPasswordBox: passwordBox
+     property bool lockScreenUiVisible: false
++    // what a PAM module asked after the password, in its own words; empty for the password
++    property string secretPrompt: ""
+     property alias showPassword: passwordBox.showPassword
+ 
+     //the y position that should be ensured visible when the on screen keyboard is visible
+@@ -62,7 +64,8 @@ SessionManagementScreen {
+             Layout.fillWidth: true
+             text: PasswordSync.password
+ 
+-            placeholderText: i18ndc("plasma_shell_org.kde.plasma.desktop", "@info:placeholder in text field", "Password")
++            placeholderText: sessionManager.secretPrompt.replace(/[:\s]+$/, "")
++                || i18ndc("plasma_shell_org.kde.plasma.desktop", "@info:placeholder in text field", "Password")
+             focus: true
+             enabled: !authenticator.graceLocked
+ 
