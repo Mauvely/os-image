@@ -1,5 +1,83 @@
 # Handoff
 
+## The browser extension in the image (brief 22, S4; 2026-10-22)
+
+os-agent `c261967` has the extension, its native host and the broker's new
+`origin` op (os-agent `docs/browser.md`). This commit is the image's half.
+**`agent.ref` is not moved**, by instruction: the parent session bundles it.
+Until it points at `c261967` or later, this Containerfile does not build (the
+host crate and `browser/package.py` are not at the pinned agent), so this
+commit was pushed with `[skip ci]`.
+
+### What ships
+
+| | |
+|---|---|
+| `/usr/libexec/mauvely/mauvely-browser-host` | The native host, static musl, from the `host-build` stage on `docker.io/library/rust:1.99.1-alpine3.24`. `host-check` runs it in an empty `scratch` stage, which only a binary that needs nothing survives (a dynamic one was refused there: "missing dynamic library"); the image copies it from there |
+| `/usr/share/mauvely/browser/org.chromium.Chromium.Extension.mauvely/` | `policies/managed/com.mauvely.signin.json` (`ExtensionInstallForcelist`), `update.xml`, `mauvely-signin.crx`. Only with `CRX_SIGNING_KEY` |
+| `/usr/share/mauvely/browser/org.mozilla.firefox.systemconfig/` | `policies/policies.json` (`ExtensionSettings`, `force_installed`), `mauvely/mauvely-signin.xpi`, AMO-signed. Only with `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`; the image's check refuses an XPI with no `META-INF/` |
+| `var-lib-flatpak-extension-org.chromium.Chromium.Extension.mauvely-x86_64-1.mount`, `var-lib-flatpak-extension-org.mozilla.firefox.systemconfig-x86_64-stable.mount` | Enabled. Each binds its tree at `/var/lib/flatpak/extension/<name>/x86_64/<branch>`, where Flatpak mounts it into the browser as an unmanaged extension. `ConditionPathIsDirectory` on the tree, so an image without it mounts nothing |
+
+- **`scripts/build.sh`** passes a third context, `browser`: `BROWSER_DIR`, or a
+  temporary directory staged by the agent's `browser/package.py` from
+  `CRX_SIGNING_KEY_FILE` and `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` in the
+  environment. Without them it says so and stages nothing. A local build
+  therefore needs `python3` and `openssl` beside podman.
+- **`publish-image.yml`** stages it before the build, from the secrets
+  `CRX_SIGNING_KEY`, `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, which **do not exist
+  yet**. Each one missing leaves its browser out, with a warning and a summary
+  block, and the rest is published. With the AMO keys, a failed signing stops
+  the run. The CRX key is written to a `0600` file in `$RUNNER_TEMP` and
+  removed when the step ends. Linted with actionlint 1.7.7.
+- **`build.yml`** needs nothing new: it builds without the extension's trees.
+
+### Why the image and not the Flatpak remote
+
+The brief put the policies in `org.chromium.Chromium.Extension` and
+`org.mozilla.firefox.systemconfig` refs in the Mauvely remote. On the VM
+(Firefox 158.0.1, Chromium 156.0.8078.47, Flatpak 1.18.4), both browsers honour
+the same extension points as *unmanaged* extensions, from
+`/var/lib/flatpak/extension/`, with no ref, no remote and nothing for the agent
+to install. In the image the extension, its host and the broker it asks move
+together; refs would let them drift. `publish-flatpak.sh` is unchanged.
+
+- **Bind mounts, not links:** a link at `/var/lib/flatpak/extension/<name>` is
+  skipped for Chromium's point (Flatpak lists `subdirectories` points without
+  asking for file types, and GLib 2.88 then reports none for a link, with a
+  page of `GLib-GIO-CRITICAL` on every `flatpak run`), and a link left pointing
+  at nothing stops Firefox starting at all ("Failed to open extension").
+- **Tried on the VM:** the two units, from `/run/systemd/system` with the trees
+  in `/var/tmp`: `active (mounted)`; inside the sandboxes
+  `app-extensions=org.chromium.Chromium.Extension.mauvely=local` and
+  `org.mozilla.firefox.systemconfig=local`; `chrome://policy` and
+  about:policies showed the policies. os-agent's `HANDOFF.md` has the rest of
+  the run.
+- **Flathub can move the Chromium branch:** the point's `version=1` is
+  Flathub's. If they bump it, branch `1` stops mounting, silently. Worth a CI
+  check against `flatpak remote-info --show-metadata flathub
+  org.chromium.Chromium` one day (S0's note 11).
+
+### The VM, left as found
+
+Done on `mauvely-01` for the run, and undone after it:
+- Chromium and mpv installed system-wide from Flathub (mpv only as "another
+  Flatpak"), then uninstalled with the runtime extensions they brought; the
+  system override the agent gave Chromium reset.
+- `/var/lib/flatpak/extension/` (did not exist before) and the two runtime
+  mount units in `/run/systemd/system`, removed.
+- timuri's `mauvely-session.service` stopped for a release build of os-agent's
+  tree run as `s4-mauvely-session`, then started again; the host in
+  `/usr/libexec/mauvely/` (the transient `/usr` overlay) removed.
+- `~/.var/app/org.chromium.Chromium` restored from a copy taken first (it held
+  Plasma's browser-integration files); the two `com.mauvely.browser.json` and
+  `mauvely-browser-host` copies, a scratch Firefox profile and a test
+  extension removed; Plasma's files left.
+- `/var/tmp/s4` (the trees, the stand-in sign-out server and its throwaway
+  CA, screenshots) removed.
+- **Not undone, and not the VM's:** two browser sessions on timuri's account,
+  "Chromium on mauvely-01" and "Firefox on mauvely-01", minted by the broker.
+  They end with the link or in 30 days; nobody signed out on mauvely.com.
+
 ## The Mauvely look in the image (brief 25, phase 2; 2026-10-22)
 
 Commits:

@@ -1,0 +1,23 @@
+# The Mauvely OS sign-in extension for Flathub's Chromium (brief 22, S4; os-agent
+# docs/browser.md): its policy, CRX and update manifest, which the image ships in
+# /usr/share/mauvely/browser/. Flatpak mounts what is here into Chromium at
+# /app/chromium/extensions/mauvely as an unmanaged extension of the point
+# org.chromium.Chromium.Extension, whose merge-dirs put the policy in
+# /app/chromium/policies/managed. Branch 1 is Flathub's `version` for the point.
+#
+# A bind mount and not a link: Flatpak 1.18 skips a link where it lists a
+# point's subdirectories, and a link left behind by an image without the files
+# would point at nothing. Without the files this mounts nothing, and Chromium
+# runs as it would without Mauvely.
+[Unit]
+Description=Mauvely OS sign-in for Chromium
+ConditionPathIsDirectory=/usr/share/mauvely/browser/org.chromium.Chromium.Extension.mauvely
+
+[Mount]
+What=/usr/share/mauvely/browser/org.chromium.Chromium.Extension.mauvely
+Where=/var/lib/flatpak/extension/org.chromium.Chromium.Extension.mauvely/x86_64/1
+Type=none
+Options=bind,ro
+
+[Install]
+WantedBy=local-fs.target

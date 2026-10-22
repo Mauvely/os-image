@@ -11,6 +11,13 @@
 # are the commits pinned in agent.ref and installer.ref, so anything else is a
 # warning, not an error: a local build against work in progress is the point
 # of a local build.
+#
+# The third context, `browser`, is the browser extension's policies and
+# packages (brief 22, S4): BROWSER_DIR when it is set, otherwise staged here by
+# the agent's browser/package.py, which reads its keys from the environment and
+# leaves out each browser whose key is not there:
+#   CRX_SIGNING_KEY_FILE            Chromium: the CRX's private key, a PEM file
+#   AMO_JWT_ISSUER, AMO_JWT_SECRET  Firefox: addons.mozilla.org, which signs the XPI
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -37,9 +44,17 @@ check() {
 check "$agent_dir" agent.ref os-agent AGENT_DIR
 check "$installer_dir" installer.ref os-installer INSTALLER_DIR
 
-exec podman build \
+browser_dir="${BROWSER_DIR:-}"
+if [ -z "$browser_dir" ]; then
+  browser_dir="$(mktemp -d "${TMPDIR:-/tmp}/mauvely-browser.XXXXXX")"
+  trap 'rm -rf "$browser_dir"' EXIT
+  python3 -I "$agent_dir/browser/package.py" stage "$browser_dir"
+fi
+
+podman build \
   --build-context "agent=$agent_dir" \
   --build-context "installer=$installer_dir" \
+  --build-context "browser=$browser_dir" \
   --build-arg "CARGO_BUILD_JOBS=${JOBS:-8}" \
   --build-arg "CMAKE_BUILD_PARALLEL_LEVEL=${JOBS:-8}" \
   -t "$tag" \

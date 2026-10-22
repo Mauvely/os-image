@@ -1,0 +1,22 @@
+# The Mauvely OS sign-in extension for Flathub's Firefox (brief 22, S4; os-agent
+# docs/browser.md): policies.json and the signed XPI, which the image ships in
+# /usr/share/mauvely/browser/. Flatpak mounts what is here into Firefox at
+# /app/etc/firefox, as the unmanaged extension org.mozilla.firefox.systemconfig
+# (branch stable, the app's own). It takes the place of a systemconfig ref
+# installed from a remote.
+#
+# A bind mount and not a link: a link left behind by an image without the files
+# would point at nothing, and Flatpak would then refuse to start Firefox at
+# all. Without the files this mounts nothing.
+[Unit]
+Description=Mauvely OS sign-in for Firefox
+ConditionPathIsDirectory=/usr/share/mauvely/browser/org.mozilla.firefox.systemconfig
+
+[Mount]
+What=/usr/share/mauvely/browser/org.mozilla.firefox.systemconfig
+Where=/var/lib/flatpak/extension/org.mozilla.firefox.systemconfig/x86_64/stable
+Type=none
+Options=bind,ro
+
+[Install]
+WantedBy=local-fs.target

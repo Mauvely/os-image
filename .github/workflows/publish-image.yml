@@ -25,6 +25,16 @@
 #     created by `cosign generate-key-pair github://Mauvely/os-image`.
 # If anything is missing the run says what and ends green, without pushing.
 #
+# ── The browser extension's keys (brief 22, S4), optional ───────────────────
+#   CRX_SIGNING_KEY   the Chromium extension's RSA private key, PEM. Its public
+#                     half is os-agent's browser/extension/manifest.chromium.json
+#                     `key`, which fixes the extension's id
+#   AMO_JWT_ISSUER    an addons.mozilla.org API key and its secret. The Firefox
+#   AMO_JWT_SECRET    XPI is signed there as an unlisted add-on, once per version
+# Without one, that browser is left out of the image, the run says so, and the
+# rest is published. With the AMO keys, a signing that fails stops the run: an
+# image that silently lost Firefox's extension is worse than none.
+#
 # ── cosign v2, not v3 ───────────────────────────────────────────────────────
 # By default v3 signs in its new bundle format, and stores the signature where
 # containers/image does not look. Every device would then refuse the image with
@@ -186,6 +196,46 @@ jobs:
           repository: Mauvely/os-installer
           ref: ${{ steps.gate.outputs.installer_ref }}
           path: installer
+
+      - name: Stage the browser extension
+        # os-agent's browser/package.py: Chromium's policy, CRX and update
+        # manifest, and Firefox's policies and signed XPI (os-agent
+        # docs/browser.md). The CRX key goes into a 0600 file outside the
+        # workspace, removed when the step ends; AMO's stay in the environment.
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
+        env:
+          CRX_SIGNING_KEY: ${{ secrets.CRX_SIGNING_KEY }}
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          out="$RUNNER_TEMP/browser"
+          mkdir -p "$out"
+          left=()
+          if [ -n "$CRX_SIGNING_KEY" ]; then
+            key="$(mktemp "$RUNNER_TEMP/crx.XXXXXX")"
+            trap 'rm -f "$key"' EXIT
+            printf '%s\n' "$CRX_SIGNING_KEY" > "$key"
+            export CRX_SIGNING_KEY_FILE="$key"
+          else
+            left+=("Chromium: the secret CRX_SIGNING_KEY is not set")
+          fi
+          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
+            left+=("Firefox: the secrets AMO_JWT_ISSUER and AMO_JWT_SECRET are not both set")
+            unset AMO_JWT_ISSUER AMO_JWT_SECRET
+          fi
+          unset CRX_SIGNING_KEY
+          python3 -I agent/browser/package.py stage "$out"
+          echo "BROWSER_DIR=$out" >> "$GITHUB_ENV"
+          if [ ${#left[@]} -gt 0 ]; then
+            echo "::warning title=Browser extension left out::$(IFS=';'; echo "${left[*]}")"
+            {
+              echo "### Browser extension left out of this image"
+              echo
+              printf -- '- %s\n' "${left[@]}"
+              echo
+              echo "That browser runs as before, without signing in from the computer's link."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build the image
         if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'

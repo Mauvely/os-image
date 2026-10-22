@@ -4,7 +4,8 @@
 #
 # Build it with scripts/build.sh, which supplies the `agent` and `installer`
 # named contexts and warns when either checkout is not the commit pinned in
-# agent.ref or installer.ref.
+# agent.ref or installer.ref. It also stages the `browser` context: the browser
+# extension's packages and policies, which need keys (os-agent browser/package.py).
 
 # ── the base ─────────────────────────────────────────────────────────────────
 # The tag is pinned to a dated build, never `latest` or a bare release number.
@@ -27,6 +28,29 @@ COPY --from=agent Cargo.toml Cargo.lock ./
 COPY --from=agent crates ./crates
 COPY --from=agent tests ./tests
 RUN cargo build --release --locked
+
+# ── mauvely-browser-host ─────────────────────────────────────────────────────
+# The browser extension's native host (brief 22, S4; os-agent docs/browser.md).
+# Firefox and Chromium run it inside their Flatpak sandboxes, from the person's
+# ~/.var/app, where none of this image's libraries can be seen: so a static
+# binary. Alpine's Rust targets musl and links statically by default; the check
+# fails if that ever changes. The scratch stage then runs it with nothing else
+# on the filesystem at all, which only a binary that needs nothing survives (no
+# input is the end of input: it exits 0). The image copies it from there, so
+# the check cannot be skipped.
+FROM docker.io/library/rust:1.99.1-alpine3.24 AS host-build
+ARG CARGO_BUILD_JOBS=8
+WORKDIR /src
+COPY --from=agent Cargo.toml Cargo.lock ./
+COPY --from=agent crates ./crates
+COPY --from=agent tests ./tests
+RUN test "$(rustc -vV | sed -n 's/^host: //p')" = x86_64-unknown-linux-musl \
+ && cargo build --release --locked -p mauvely-browser-host \
+ && mkdir /out && cp target/release/mauvely-browser-host /out/
+
+FROM scratch AS host-check
+COPY --from=host-build /out/mauvely-browser-host /mauvely-browser-host
+RUN ["/mauvely-browser-host"]
 
 # ── mauvely-signin ───────────────────────────────────────────────────────────
 # The sign-in window mauvely-session starts (os-installer's signin/). Built on
@@ -218,8 +242,44 @@ RUN python3 -c 'import json; p = "/etc/containers/policy.json"; d = json.load(op
 RUN sed -i 's/^UseUnattendedUpdates=true$/UseUnattendedUpdates=false/' /etc/xdg/PlasmaDiscoverUpdates \
  && grep -qx 'UseUnattendedUpdates=false' /etc/xdg/PlasmaDiscoverUpdates
 
+# The browser extension (brief 22, S4; os-agent docs/browser.md).
+# - The native host, which mauvely-session copies into each browser's own
+#   ~/.var/app directory with its manifest, at login.
+# - The `browser` context, which scripts/build.sh stages with os-agent's
+#   browser/package.py: Chromium's policy, CRX and update manifest, and
+#   Firefox's policies.json and AMO-signed XPI. Each needs its key; without it
+#   that tree is missing, and the image is otherwise the same.
+# - rootfs/ has a mount unit per tree, enabled below, binding it at
+#   /var/lib/flatpak/extension/<name>/x86_64/<branch>, where Flatpak mounts it
+#   into that browser as an unmanaged extension. A unit whose tree is missing
+#   mounts nothing.
+# The checks: each tree is whole and agrees with itself, and the units' names
+# are their mount points'.
+COPY --from=host-check /mauvely-browser-host /usr/libexec/mauvely/mauvely-browser-host
+COPY --from=browser . /usr/share/mauvely/browser/
+RUN /usr/libexec/mauvely/mauvely-browser-host < /dev/null \
+ && b=/usr/share/mauvely/browser \
+ && for f in $(find "$b" -name '*.json'); do python3 -I -c 'import json, sys; json.load(open(sys.argv[1]))' "$f"; done \
+ && c="$b/org.chromium.Chromium.Extension.mauvely" \
+ && if [ -d "$c" ]; then \
+      id="$(sed -n "s/.*appid='\([a-p]\{32\}\)'.*/\1/p" "$c/update.xml")" \
+      && grep -q "\"$id;file:///app/chromium/extensions/mauvely/update.xml\"" "$c/policies/managed/com.mauvely.signin.json" \
+      && test "$(head -c 4 "$c/mauvely-signin.crx")" = Cr24 \
+      && echo "browser: Chromium extension $id"; \
+    else echo "browser: no Chromium extension in this image"; fi \
+ && f="$b/org.mozilla.firefox.systemconfig" \
+ && if [ -d "$f" ]; then \
+      grep -q 'file:///app/etc/firefox/mauvely/mauvely-signin.xpi' "$f/policies/policies.json" \
+      && python3 -I -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); assert any(n.startswith("META-INF/") for n in z.namelist())' "$f/mauvely/mauvely-signin.xpi" \
+      && echo "browser: Firefox extension, signed"; \
+    else echo "browser: no Firefox extension in this image"; fi \
+ && for m in org.chromium.Chromium.Extension.mauvely/x86_64/1 org.mozilla.firefox.systemconfig/x86_64/stable; do \
+      test -f "/usr/lib/systemd/system/$(systemd-escape -p --suffix=mount "/var/lib/flatpak/extension/$m")"; \
+    done
+
 # Units.
-# - enabled: the agent, and the seal that runs before it.
+# - enabled: the agent, the seal that runs before it, and the browser
+#   extension's two mount units (above).
 # - masked: everything in the base that applies an update and reboots, or that
 #   would stage one behind the agent's back. The agent stages and never reboots.
 # - masked: flatpak-add-fedora-repos, which adds the `fedora` OCI remotes on first
@@ -227,6 +287,8 @@ RUN sed -i 's/^UseUnattendedUpdates=true$/UseUnattendedUpdates=false/' /etc/xdg/
 # - masked: rpm-ostree-countme, which reports each machine to Fedora's mirrors.
 # Plasma Setup stays enabled: in milestone 1 it makes the first local account.
 RUN systemctl enable mauvelyd.service mauvely-seal.service \
+ && systemctl enable var-lib-flatpak-extension-org.chromium.Chromium.Extension.mauvely-x86_64-1.mount \
+      var-lib-flatpak-extension-org.mozilla.firefox.systemconfig-x86_64-stable.mount \
  && systemctl --global enable mauvely-session.service mauvely-look.service \
  && systemctl mask \
       bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service \

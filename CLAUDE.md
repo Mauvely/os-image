@@ -15,6 +15,7 @@ superproject. Read it before changing anything here.
 | `agent.ref` | The os-agent commit the image is built from. Moving it is a deliberate commit |
 | `installer.ref` | The os-installer commit `mauvely-signin`, the sign-in window, is built from (its `signin/`). Moving it is a deliberate commit |
 | `rootfs/` | Files copied over `/` in the image: the seal unit and script, the bootc install config, branding, the Mauvely look (global themes, KDE defaults in `/usr/share/mauvely/xdg`, Plymouth theme) |
+| `rootfs/usr/lib/systemd/system/var-lib-flatpak-extension-*.mount` | The browser extension (brief 22, S4; os-agent `docs/browser.md`): each binds a tree of `/usr/share/mauvely/browser/` where Flatpak mounts it into Firefox or Chromium. The trees are the `browser` build context, which `scripts/build.sh` stages with os-agent's `browser/package.py` |
 | `patches/breeze/` | Applied to Fedora's Breeze source in the image's build: the `CornerRadius` key behind the look's 8 px window corners |
 | `scripts/build.sh` | The one way to build, locally and in CI. Warns when `../agent` is not at `agent.ref`, or `../installer` not at `installer.ref` |
 | `scripts/bump-base.sh` | Moves the Kinoite pin to the newest build of the same release. The weekly run of `publish-image.yml` uses it |
@@ -42,6 +43,9 @@ superproject. Read it before changing anything here.
   only in the Actions secret `FLATPAK_GPG_KEY`, and the image key's only in
   `COSIGN_PRIVATE_KEY`.
   - Both public halves are committed here.
+  - The browser extension's keys are Actions secrets too: `CRX_SIGNING_KEY`,
+    `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, read only by `publish-image.yml`.
+    A throwaway CRX key for a test stays under `~/.cache/mauvely-os/`.
   - The Flatpak key's fingerprint is
     `C9094B2147C0E6AF28E8CC7FFDC884F8E872CE0A`. Check any public key file
     against it.
