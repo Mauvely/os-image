@@ -1,5 +1,272 @@
 # Handoff
 
+## The Mauvely look in the image (brief 25, phase 2; 2026-10-22)
+
+Commits:
+- `1701d0b`: the look.
+- `11af5dd`: `agent.ref` to os-agent `182f3ae`, phase 3's desktop policy.
+- `89fa4f4`: the title-bar buttons as an image default; the first VM run
+  showed they were missing.
+
+Published to `next` twice:
+- run 39710560414, `sha256:47c6fe18…17cfe`;
+- run 39712802448, `sha256:b781a2db…a554`, which is the current `next`.
+
+Each was booted on `mauvely-01` with a brand-new account. Phase 1's record
+stays in `design/plasma/`.
+
+### What ships, and where
+
+| | |
+|---|---|
+| Global themes | `/usr/share/plasma/look-and-feel/com.mauvely.{light,dark,plasma}.desktop`: "Mauvely light", "Mauvely dark", "Plasma" |
+| Colour schemes | `/usr/share/color-schemes/Mauvely{Light,Dark,Plasma}.colors` |
+| Plasma style | `/usr/share/plasma/desktoptheme/mauvely` (Breeze, with translucent panel, dialogs and tooltips) |
+| Wallpaper | `/usr/share/wallpapers/Mauvely` (light and dark) |
+| Start glyph | `/usr/share/icons/hicolor/scalable/apps/com.mauvely.start.svg`, in the icon cache the sign-in step rebuilds |
+| Fonts | `rsms-inter-fonts`, `jetbrains-mono-fonts` |
+| KDE defaults | `/usr/share/mauvely/xdg/`: `kdeglobals`, `breezerc`, `kwinrc` (title-bar buttons), `kscreenlockerrc`, `kicker-extra-favoritesrc` |
+| Wiring | `/etc/profile.d/mauvely-xdg.sh` |
+| Window corners | `/usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so`, rebuilt with `patches/breeze/` |
+| Login screen | `/usr/lib/plasmalogin/plasmalogin.conf.d/50-mauvely.conf` |
+| Boot | `/usr/share/plymouth/themes/mauvely/`, the default in `plymouthd.defaults`; `/usr/lib/bootc/kargs.d/10-mauvely-splash.toml` (`rhgb quiet`) |
+
+- **The Mauvely themes** are phase 1's, with three changes:
+  - each has its own splash (`contents/splash/`), so the `[ksplashrc]` line
+    naming Breeze's is gone;
+  - their layout script also writes `breezerc` `CornerRadius=8`,
+    `MenuOpacity=70` and the title-bar buttons, which a theme's `defaults`
+    cannot carry (KConfig writes nothing for a value equal to the image's, so
+    a new account's own files stay clean);
+  - light and dark share `layoutdefaults`, `layouts/` and `splash/` byte for
+    byte. The build `diff -r`s them, so change both.
+- **The Plasma preset** (`com.mauvely.plasma.desktop`, phase 3's id): Breeze's
+  `defaults` with:
+  - `ColorScheme=MauvelyPlasma`, which is Breeze Light tinted with
+    `#968ae0` by Plasma's own `plasma-apply-colorscheme --accent-color`
+    (`design/plasma/src/gen_plasma_colors.sh` makes it from the base image);
+  - Noto Sans written out (the image's default is Inter), `BorderSize=Normal`,
+    and KWin's own buttons (`MSE` / `HIAX`), so applying it undoes
+    Mauvely's;
+  - Breeze's default panel, and a layout script that writes
+    `CornerRadius=-1`, `MenuOpacity=100` and KWin's buttons.
+  - The Containerfile copies Breeze's `splash/` and `previews/` into it. A
+    global theme's splash setting only applies when the package has a splash,
+    and its `defaults` name Breeze's.
+- **Not set, because Breeze 6.7.5 already defaults to them**
+  (`breezesettingsdata.kcfg`): centred titles (`AlignCenterFullWidth`),
+  rounded corners, the outline, large shadows. `BorderSize=None` travels in
+  the Mauvely themes.
+- **The title-bar buttons are an image default** (`/usr/share/mauvely/xdg/kwinrc`:
+  nothing on the left, `IAX` on the right), not only the themes'
+  `layoutdefaults`. Plasma applies a theme's title-bar layout only with its
+  desktop layout, and a first login with day/night switching applies
+  appearance alone (`dayNightLookAndFeel` → `AppearanceSettings`). The first
+  VM run showed KWin's window-menu button on the left; `89fa4f4` fixed it.
+- **Blur** stays KWin's default: on with a GPU, off on software rendering,
+  which is what the VM has.
+
+### How the defaults beat Fedora's, and why there
+
+- **How Fedora wires its own:**
+  - `kde-settings` puts its defaults in a profile directory,
+    `/usr/share/kde-settings/kde-profile/default/xdg/`. That holds the Fedora
+    global theme, Noto Sans, a Kontact-first favourites list and the Fedora
+    lock-screen wallpaper.
+  - Its `/etc/xdg/plasma-workspace/env/env.sh` sets
+    `XDG_CONFIG_DIRS=/etc/xdg:<profile>`, but only when the variable is
+    empty. startplasma sources that directory's scripts, then puts
+    `~/.config/kdedefaults` in front.
+- **Ours:** `/etc/profile.d/mauvely-xdg.sh` sets the whole list:
+  `/var/lib/mauvely-desktop/xdg:/etc/xdg:/usr/share/mauvely/xdg:<Fedora's profile>`.
+  - The first entry is phase 3's policy, written by mauvelyd; it may not
+    exist.
+  - Fedora's env.sh then sees a value and leaves it, and startplasma still
+    puts kdedefaults in front.
+  - A shell inside a session (Fedora's bashrc sources profile.d too) keeps
+    `…/kdedefaults:` + the list; any other value is replaced.
+- **Why profile.d:** Plasma Login Manager starts both the user session and
+  its own greeter through `/etc/plasmalogin/wayland-session`, which runs a
+  login shell, or sources `/etc/profile` for `plasmalogin`'s nologin shell.
+  So one file reaches the session and the login screen.
+- **No `environment.d` entry.** The greeter never reads one, and startplasma
+  copies its own `XDG_CONFIG_DIRS` into the systemd user manager anyway.
+- **Why `/usr/share/mauvely/xdg`, not `/etc/xdg`:** the image's defaults
+  change with each image, atomically. `/etc` is merged three ways, so a
+  locally edited file there stops taking updates, and it stays the machine
+  admin's layer, above the image's.
+- **What a new account goes through:**
+  1. startplasma reads `LookAndFeelPackage`, `AutomaticLookAndFeel` and the
+     day/night pair from that list, picks light or dark, and writes the
+     theme's `defaults` into `~/.config/kdedefaults`.
+  2. plasmashell runs the theme's layout script once.
+  - The lock-screen wallpaper and Kickoff's favourites come straight from
+    `/usr/share/mauvely/xdg`.
+- **Existing accounts:** any account whose own `kdeglobals` names no theme
+  moves to Mauvely at its next login, without the panel layout, which only a
+  new account (or a reset) gets. That is read from startplasma's source, not
+  seen. timuri on the VM is unaffected: his
+  phase-1 copies in `~/.local/share/plasma/look-and-feel` shadow the shipped
+  themes, and his `~/.config` names them. He was left that way.
+
+### The Breeze patch, and keeping it current
+
+- **What the patch does:** `patches/breeze/0001-breezerc-CornerRadius.patch`
+  adds `[Common] CornerRadius` (Double, logical pixels, default -1) to
+  `kdecoration/breezesettingsdata.kcfg`, and uses it in
+  `Decoration::setScaledCornerRadius()`. Negative keeps Breeze's own radius,
+  `Frame_FrameRadius` (2.5) × the small spacing, which is 5 px on Wayland.
+  KWin clips the window to it, the outline and the shadow follow it.
+- **How it is built:** the `breeze-build` stage starts from the same pinned
+  base (now the named stage `kinoite`; `bump-base.sh` follows the line
+  `FROM … AS kinoite`).
+  1. It version-locks every installed package, so `dnf builddep` pulls
+     `-devel` packages at the base's exact versions; Fedora's
+     `updates-archive` serves the older ones.
+  2. It downloads `plasma-breeze-<base's VR>.src.rpm` from
+     `fedora-source`/`updates-source` and checks it against Fedora's key with
+     `rpmkeys` (`signatures OK`).
+  3. It runs Fedora's `%prep`, applies `patches/breeze/*.patch` with
+     `--fuzz=0`, builds only `breezedecoration` with Fedora's flags, and
+     strips it.
+  - The image replaces Fedora's `org.kde.breeze.so` with it and loads it with
+    `RTLD_NOW` against the image's libraries. `rpm -V plasma-breeze` would
+    report that one file. The KCM stays Fedora's and does not know the key.
+- **It fails, loudly, when:**
+  - Fedora no longer serves the base's exact source RPM (the repositories
+    moved past the pin). Run `scripts/bump-base.sh`, which picks a base with
+    the newer Breeze.
+  - The patch no longer applies. That happens when a base bump brings a new
+    Breeze, and the weekly `next` then fails and `stable` stays.
+- **Refreshing the patch:**
+  1. Get the new source with
+     `dnf download --source plasma-breeze-<VR>` in the new base, then
+     `rpm -i` it and `rpmbuild -bp` it, or check out the matching tag from
+     `invent.kde.org/plasma/breeze`.
+  2. Make the two changes again.
+  3. Write the patch with `diff -ru a b` (paths `a/kdecoration/…`), keeping
+     its header.
+  4. Build. The stage's own checks say whether it applied and loads.
+  - Koji's signed copies are kept for some builds only (6.7.4-2's is gone),
+    so it is not a fallback.
+- **Known, not fixed:** Breeze caches window shadows without the radius as a
+  key. A `CornerRadius` changed while KWin runs keeps the old shadow corners
+  until KWin restarts. At login the value is already there.
+
+### Boot to desktop
+
+- **Plymouth:** theme `mauvely` (two-step).
+  - The ground is `#12142e`, the dark wallpaper's. The watermark is the
+    "m." mark at 0.45 of the height, the spinner at 0.7.
+  - The spinner and the unlock prompt's images are copied from Fedora's
+    `spinner` theme in the Containerfile. The watermark is
+    `rsvg-convert -h 112` of the splash's `mark.svg`.
+  - No `Font=`: Fedora's `plymouth-populate-initrd` runs `fc-match` on the
+    whole "Family Size" string, finds nothing and installs the default font
+    anyway.
+  - Comments in a `.plymouth` file can stop plymouth's key-file parser, so
+    there are none.
+  - The initramfs check now also requires the theme. 96.8 MB, unchanged.
+- **`rhgb quiet`** come from bootc's kargs.d. bootc adds them at install, and
+  on an update as the difference between the two images' kargs.d.
+- **KSplash:** the Mauvely themes' `Splash.qml` puts the same mark and a busy
+  ring where Plymouth does (`(screen − image) × alignment`), on the same
+  ground.
+- **Lock screen:** `kscreenlockerrc` in `/usr/share/mauvely/xdg` points it at
+  the Mauvely wallpaper package, which picks the dark image with a dark
+  scheme.
+- **Login screen (spike):**
+  - Plasma Login Manager's greeter settings are a KConfig cascade where
+    `/usr/lib/plasmalogin/plasmalogin.conf.d/*` beats Fedora's
+    `/usr/lib/plasmalogin/defaults.conf`, and `/etc/plasmalogin.conf` beats
+    both. The cascade is `/etc/plasmalogin.conf.d/*` < `defaults.conf` <
+    `/usr/lib/…/conf.d/*` < `/etc/plasmalogin.conf`; note that
+    `/etc/plasmalogin.conf.d` is the lowest for the greeter, though not for
+    the daemon.
+  - Its keys: the wallpaper plugin and its config, `ShowClock`,
+    `PreselectedUser`/`Session`. There is no colour or font key.
+  - The greeter's colours, fonts and Plasma style come from the `plasmalogin`
+    user's global theme. Its `startplasma-login-wayland` runs the same
+    LookAndFeel/kdedefaults logic as a session, and through profile.d it
+    reads Mauvely's `kdeglobals`.
+  - The Login Screen KCM's "sync" writes `/var/lib/plasmalogin/.config/`,
+    which wins over all of it.
+
+### Seen on `mauvely-01` (2026-10-22, `b781a2db`, a brand-new account)
+
+The screenshots are in the session's scratchpad (`look2/`), which is not kept.
+- **The kernel command line** has `rhgb quiet`. bootc added them on the update
+  from an image without kargs.d, as designed.
+- **The initramfs** carries `themes/mauvely` (75 files).
+- **`plymouth-set-default-theme`** prints `mauvely`. plymouthd ran from 2.2 s
+  to 11 s.
+- **Not seen:** the Plymouth screen itself, which a console capture over SSH
+  cannot show. A composite of the shipped images at their alignments stood in.
+- **`XDG_CONFIG_DIRS`** is exactly
+  `…/kdedefaults:/var/lib/mauvely-desktop/xdg:/etc/xdg:/usr/share/mauvely/xdg:<Fedora's profile>`
+  in plasmashell, kwin_wayland, kded6, ksmserver and System Settings.
+  startplasma-wayland has the same list without kdedefaults, and so does
+  timuri's session after the reboot.
+- **The login screen's** startplasma-login-wayland, kwin_wayland,
+  plasma-login-greeter and plasma-login-wallpaper have the same list, after
+  `/var/lib/plasmalogin/.config/kdedefaults`.
+- **The new account:**
+  - It started on Mauvely; it was night, so dark. Every setting read back from
+    its own cascade: `CornerRadius=8`, `MenuOpacity=70`, buttons ""/`IAX`,
+    `BorderSize=None`, Inter 10, `MauvelyDark`, automatic switching on.
+  - **Desktop and panel:** the centred taskbar with the "m." start glyph.
+  - **Kickoff:** a grid of Mauvely's favourites (Firefox as the preferred
+    browser, Dolphin, Konsole, System Settings, Discover, KWrite, Spectacle,
+    Ark, Filelight), not Fedora's Kontact list.
+  - **Dolphin:** centred title, `IAX` alone, no borders, and 8 px corners
+    top and bottom. Measured against `CornerRadius=-1`, which gave Breeze's
+    5 px.
+  - **Lock screen:** the Mauvely wallpaper, in light and in dark.
+  - **Splash:** checked with `ksplashqml --test`.
+  - **Light:** forced with `knighttimerc` (`Source=Times`) and a restart of
+    `plasma-knighttimed`. The switcher then put on Mauvely light within
+    seconds. The file was deleted afterwards, and the switcher put back dark.
+- **The Plasma preset**, applied on the first test account with
+  `plasma-apply-lookandfeel -a com.mauvely.plasma.desktop --resetLayout`:
+  the stock panel, the Next wallpaper, Noto Sans, the violet accent, and
+  `CornerRadius=-1`/`MenuOpacity=100` in the person's `breezerc`.
+- **Login screen:** the Mauvely light wallpaper behind the greeter's blur and
+  dimming, Inter, the violet accent. The greeter's own global theme is
+  `com.mauvely.light.desktop`: with no knighttimed in the greeter, it never
+  switches to dark.
+- **Afterwards:** autologin is `User=timuri` again. `mauvelytest` (uid 1001,
+  no password) stays, with `Autolock=false` in its `kscreenlockerrc` so that
+  an idle SSH test does not lock it. timuri's phase-1 files were left as they
+  are.
+
+### Left open
+
+- **A screen plugged in after the first login gets no taskbar**, which is
+  Plasma's behaviour. The fix would be a "Mauvely taskbar" layout template
+  (`/usr/share/plasma/layout-templates/`), which also gives Add Panel a
+  Mauvely choice.
+- **A preset's buttons and Breeze keys travel only through its layout
+  script.** KWin also picks them up only at its next reconfigure.
+- **The Plasma preset keeps the Mauvely lock-screen wallpaper.** The login
+  screen is always Mauvely's.
+- **The Mauvely themes have no preview images**, so System Settings' Global
+  Theme page shows none for them.
+- **A first login at night starts light, then turns dark** about 9 s in:
+  startplasma picks a theme before `plasma-knighttimed` is up, and the
+  switcher corrects it. Plasma Welcome, already open by then, keeps light
+  content under a dark title bar, and it greets with "Welcome to Fedora!"
+  (`plasma-welcome-fedora`).
+- **On the light wallpaper** the lock screen's white clock and date are faint.
+  That is Breeze's lock screen; Mauvely's global themes ship none of their
+  own.
+- **The Plasma preset through phase 3:** `plasma-apply-lookandfeel -a`
+  without `--resetLayout` brings neither the buttons nor the Breeze keys, so
+  the preset keeps `IAX`, 8 px corners and acrylic menus. Phase 3 can write
+  `kwinrc` and `breezerc` into its policy directory for it.
+- **The two images built on `44.20261019.0`.** `bump-base.sh` finds
+  `44.20261021.0` and the weekly run takes it; the Breeze stage follows by
+  construction.
+
 ## The sign-in window in the image (2026-10-22)
 
 `installer.ref` is new: the os-installer commit `mauvely-signin` is built from
@@ -60,7 +327,7 @@ for the 7.4 GB base. `build.yml` has not run with it.
 
 Prototyped live on the VM on 2026-10-21. Timur's decisions: day/night
 switching, Inter, re-apply on change, and two locks (the look; the panel and
-widgets). Not in the image yet. Phase 2 packages it.
+widgets). Phase 2 shipped it: the section above says what changed on the way.
 
 **Settings that phase 2 must reproduce:**
 - **Window decoration:**
@@ -173,9 +440,8 @@ device", and the agent staged it again every boot.
 ## From Timur's first install on Proxmox (2026-10-16), not done yet
 
 He asked for these to be noted, not done:
-- **Boot is text, not a splash.** The image has no `/usr/lib/bootc/kargs.d`, so
-  `bootc install` writes no `rhgb quiet` (Anaconda adds them for Kinoite). Add a
-  `kargs.d` file, and a Mauvely two-step Plymouth theme instead of `bgrt`.
+- ~~**Boot is text, not a splash.**~~ Done in brief 25's phase 2 (above):
+  `kargs.d` gives `rhgb quiet`, and the Plymouth theme is Mauvely's.
 - **The installer's copy step looks stuck** (os-installer): bootc prints nothing
   between "layers needed: 266 (7.5 GB)" and the end. Show the bytes written to
   the target disk instead.
