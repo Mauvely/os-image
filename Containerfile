@@ -145,7 +145,7 @@ RUN rpm -q qt6-qtwebengine qt6-qtsvg \
 # - The Plasma preset borrows Breeze's own splash and previews: a global
 #   theme's splash setting only applies when the package has a splash.
 # - Light and dark share their layout and splash, byte for byte.
-# - The last three checks read the defaults the way a session does, from a
+# - The last four checks read the defaults the way a session does, from a
 #   shell with no XDG_CONFIG_DIRS of its own: Mauvely's must win over Fedora's.
 COPY --from=breeze-build /out/org.kde.breeze.so /usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so
 RUN so=/usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so \
@@ -171,7 +171,8 @@ RUN so=/usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so \
  && test "$(read_default --file kdeglobals --group KDE --key LookAndFeelPackage)" = com.mauvely.light.desktop \
  && read_default --file kicker-extra-favoritesrc --group General --key Prepend | grep -q '^preferred://browser;org.kde.dolphin.desktop;' \
  && test "$(read_default --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key Image)" \
-      = file:///usr/share/wallpapers/Mauvely/
+      = file:///usr/share/wallpapers/Mauvely/ \
+ && test "$(read_default --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight)" = IAX
 
 # Mauvely OS, and nothing more: the name, the About page and the logo. ID and
 # VERSION_ID stay Fedora's, so dnf, flatpak and bootc are unaffected, and so do

@@ -1,0 +1,8 @@
+# Mauvely OS: minimise, maximise and close on the right, nothing on the left.
+# The Mauvely global themes carry this in their layoutdefaults too, but Plasma
+# applies a theme's title-bar layout only with its desktop layout, and a new
+# account that switches light and dark by time of day gets appearance alone.
+
+[org.kde.kdecoration2]
+ButtonsOnLeft=
+ButtonsOnRight=IAX

@@ -50,10 +50,14 @@ for (var j = 0; j < desktopsArray.length; j++) {
     desktopsArray[j].wallpaperPlugin = "org.kde.image";
 }
 
-// Breeze's corner radius (8 px, os-image's patches/breeze/) and acrylic menus cannot travel in a
-// global theme's defaults, so the layout writes them. They are also the image's own defaults
-// (/usr/share/mauvely/xdg/breezerc); this puts them back after another preset.
+// Breeze's corner radius (8 px, os-image's patches/breeze/), acrylic menus and the title-bar
+// buttons do not reach a new account from a global theme's defaults, so the image sets them
+// (/usr/share/mauvely/xdg/breezerc and kwinrc), and this puts them back after another preset.
+// KConfig writes nothing for a value equal to the image's.
 var breeze = ConfigFile("breezerc", "Common");
 breeze.writeEntry("CornerRadius", 8);
 breeze.group = "Style";
 breeze.writeEntry("MenuOpacity", 70);
+var buttons = ConfigFile("kwinrc", "org.kde.kdecoration2");
+buttons.writeEntry("ButtonsOnLeft", "");
+buttons.writeEntry("ButtonsOnRight", "IAX");
