@@ -22,6 +22,7 @@ on:
     paths:
       - Containerfile
       - agent.ref
+      - installer.ref
       - keys/cosign.pub
       - rootfs/**
       - scripts/build.sh
@@ -53,6 +54,13 @@ jobs:
             exit 1
           fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          # os-installer (the sign-in window) is public, so it needs no token.
+          installer="$(tr -d '[:space:]' < installer.ref)"
+          if ! [[ "$installer" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error file=installer.ref::installer.ref must hold one full commit hash, got '$installer'"
+            exit 1
+          fi
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
           # Once os-agent is public the token is not needed, and this finds out by
           # asking without one.
           if [ -z "$OS_AGENT_TOKEN" ] \
@@ -96,11 +104,19 @@ jobs:
           token: ${{ secrets.OS_AGENT_TOKEN || github.token }}
           path: agent
 
+      - name: Check out os-installer at the pinned commit
+        if: steps.pin.outputs.ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Mauvely/os-installer
+          ref: ${{ steps.pin.outputs.installer }}
+          path: installer
+
       - name: Build the image (ends with bootc container lint)
         if: steps.pin.outputs.ready == 'true'
         run: |
           podman --version
-          AGENT_DIR=agent TAG=localhost/mauvely-os:ci JOBS=8 scripts/build.sh
+          AGENT_DIR=agent INSTALLER_DIR=installer TAG=localhost/mauvely-os:ci JOBS=8 scripts/build.sh
 
       - name: Summary
         if: steps.pin.outputs.ready == 'true'
@@ -109,5 +125,6 @@ jobs:
             echo "### Image built and linted"
             echo
             echo "- agent: \`${{ steps.pin.outputs.ref }}\`"
+            echo "- installer: \`${{ steps.pin.outputs.installer }}\`"
             echo "- image: $(podman image inspect --format '{{.Size}}' localhost/mauvely-os:ci | numfmt --to=iec) on disk, not pushed"
           } >> "$GITHUB_STEP_SUMMARY"

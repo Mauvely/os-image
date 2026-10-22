@@ -1,5 +1,61 @@
 # Handoff
 
+## The sign-in window in the image (2026-10-22)
+
+`installer.ref` is new: the os-installer commit `mauvely-signin` is built from
+(its `signin/`), the way `agent.ref` pins the agent. Both moved in this
+commit: `installer.ref` to os-installer `b7436e9`, `agent.ref` to os-agent
+`d4171f6`, which starts the window instead of the kdialog offer and code.
+os-installer's `CLAUDE.md` ("The sign-in window") and os-agent's
+`docs/broker.md` ("Linking") have the design.
+
+- **`signin-build`**, a builder stage on Fedora 44: `qt6-qtbase-devel`,
+  `qt6-qtsvg-devel`, `qt6-qtwebengine-devel`, cmake and ninja. It builds only
+  `mauvely-signin` and `tst_signin` (`-DMAUVELY_SIGNIN=ON`), runs the tests,
+  and installs the `signin` component into `/out`. The tests that start the
+  window run with `QTWEBENGINE_DISABLE_SANDBOX=1`: a build runs as root, and
+  Chromium will not start its sandbox as root. On a machine the window runs as
+  the person, sandboxed.
+- **In the image**: `/usr/bin/mauvely-signin`,
+  `/usr/share/applications/com.mauvely.signin.desktop` (`NoDisplay=true`, the
+  Wayland app id) and `/usr/share/icons/hicolor/scalable/apps/com.mauvely.signin.svg`.
+  The base already has `qt6-qtwebengine` and `qt6-qtsvg`, so the only cost is
+  the binary.
+- **Checks in the build**: the binary is fed a bad first line and must exit 2,
+  which it reaches only after every library has loaded; a builder Qt newer
+  than the base's fails here, not on a machine. `desktop-file-validate`
+  passes. The hicolor `icon-theme.cache` is rebuilt and must list the icon:
+  ostree sets every mtime to 1970, so the base's cache would never look stale
+  and the icon would not be found.
+- **`scripts/build.sh`** passes `--build-context installer=…` (`INSTALLER_DIR`,
+  default `../installer`) and warns when it is not at `installer.ref`.
+  `build.yml` and `publish-image.yml` check out `Mauvely/os-installer` at
+  `installer.ref`; it is public, so no token. `publish-image.yml` now also
+  refuses to publish if os-installer is private (the image is GPL and built
+  from it).
+
+**Built locally, not booted, not pushed:** `localhost/mauvely-os:signin`,
+`935d94b77966`, 7.58 GB, from clean checkouts of os-agent `d4171f6` and
+os-installer `b7436e9` (`JOBS=24`). `installer.ref` is `900fb48`, which
+changes only os-installer's `CLAUDE.md` and `HANDOFF.md`; neither is copied
+into the image. In the build: `tst_signin` 21 passed on Fedora 44's Qt 6.11.2,
+the loader check exited 2, `desktop-file-validate` passed, the icon cache
+lists the icon, and `bootc container lint` passed 14 checks and skipped 1.
+`/usr/bin/mauvely-signin` is 1.6 MB.
+
+**For the real run on `mauvely-01`** (Timur's): publish to `next`, let the VM
+take it, and log in to Plasma as a local user with no `os.cred`. The window
+should open by itself with the code; signing in and approving should end in
+"Signed in to Mauvely as …". Worth watching there, none of it seen yet: KWin's
+placement and focus for a window a user service starts, the window's icon in
+the task manager, the OpenURI portal handing "Use your browser instead" and
+off-site links to the browser Flatpak, and the light and dark schemes
+switching while the window is open.
+
+**Worth knowing:** the builder stage adds Qt WebEngine's devel packages, a few
+hundred MB, on GitHub-hosted runners where `build.yml` already clears space
+for the 7.4 GB base. `build.yml` has not run with it.
+
 ## The Mauvely look, phase 1 (brief 25; prototype in `design/plasma/`)
 
 Prototyped live on the VM on 2026-10-21. Timur's decisions: day/night

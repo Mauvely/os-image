@@ -18,7 +18,8 @@
 #                    exactly what was tried on next, byte for byte
 #
 # ── What it will not run without ────────────────────────────────────────────
-#   - os-image and os-agent public. The image is GPL-3.0 and is built from both.
+#   - os-image, os-agent and os-installer public. The image is GPL-3.0 and is
+#     built from all three.
 #   - keys/cosign.pub, the key the image trusts.
 #   - for next, the secrets COSIGN_PRIVATE_KEY and COSIGN_PASSWORD. They are
 #     created by `cosign generate-key-pair github://Mauvely/os-image`.
@@ -109,6 +110,8 @@ jobs:
           [ "$PRIVATE" = false ] || missing+=("os-image is private")
           GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code https://github.com/Mauvely/os-agent.git HEAD >/dev/null 2>&1 \
             || missing+=("os-agent is private")
+          GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code https://github.com/Mauvely/os-installer.git HEAD >/dev/null 2>&1 \
+            || missing+=("os-installer is private")
           grep -q 'BEGIN PUBLIC KEY' keys/cosign.pub 2>/dev/null || missing+=("keys/cosign.pub is not committed")
           if [ "$CHANNEL" = next ]; then
             [ -n "$COSIGN_PRIVATE_KEY" ] || missing+=("the secret COSIGN_PRIVATE_KEY is not set")
@@ -116,6 +119,9 @@ jobs:
             ref="$(tr -d '[:space:]' < agent.ref)"
             [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || missing+=("agent.ref does not hold one full commit hash")
             echo "agent_ref=$ref" >> "$GITHUB_OUTPUT"
+            installer="$(tr -d '[:space:]' < installer.ref)"
+            [[ "$installer" =~ ^[0-9a-f]{40}$ ]] || missing+=("installer.ref does not hold one full commit hash")
+            echo "installer_ref=$installer" >> "$GITHUB_OUTPUT"
           fi
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::notice title=Nothing published::$(IFS=';'; echo "${missing[*]}")"
@@ -173,9 +179,17 @@ jobs:
           ref: ${{ steps.gate.outputs.agent_ref }}
           path: agent
 
+      - name: Check out os-installer at the pinned commit
+        if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
+        uses: actions/checkout@v4
+        with:
+          repository: Mauvely/os-installer
+          ref: ${{ steps.gate.outputs.installer_ref }}
+          path: installer
+
       - name: Build the image
         if: steps.gate.outputs.ready == 'true' && env.CHANNEL == 'next'
-        run: AGENT_DIR=agent TAG=localhost/mauvely-os:publish JOBS=8 scripts/build.sh
+        run: AGENT_DIR=agent INSTALLER_DIR=installer TAG=localhost/mauvely-os:publish JOBS=8 scripts/build.sh
 
       - name: Push to next
         id: push
@@ -221,6 +235,7 @@ jobs:
             echo "- digest: \`$DIGEST\`"
             echo "- os-image: \`$(git rev-parse HEAD)\`"
             echo "- agent: \`${{ steps.gate.outputs.agent_ref }}\`"
+            echo "- installer: \`${{ steps.gate.outputs.installer_ref }}\`"
             echo "- signed, and accepted by the image's own signature policy"
           } >> "$GITHUB_STEP_SUMMARY"
 
