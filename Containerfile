@@ -180,7 +180,8 @@ RUN so=/usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so \
       = file:///usr/share/wallpapers/Mauvely/ \
  && test "$(read_default --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight)" = IAX
 
-# Mauvely OS, and nothing more: the name, the About page and the logo. ID and
+# Mauvely OS, and nothing more (Timur, 2026-10-22: the Fedora base belongs in the
+# docs, not the name): the name, the About page and the logo. ID and
 # VERSION_ID stay Fedora's, so dnf, flatpak and bootc are unaffected, and so do
 # the OSTREE_VERSION, CPE_NAME and REDHAT_* lines. The URLs that pointed at
 # Fedora Kinoite's support pages go.
@@ -189,7 +190,7 @@ RUN . /usr/lib/os-release \
       -e '/^(ANSI_COLOR|LOGO|HOME_URL|DOCUMENTATION_URL|SUPPORT_URL|BUG_REPORT_URL)=/d' \
       -e 's|^NAME=.*|NAME="Mauvely OS"|' \
       -e 's|^VERSION="([^ ]+) \(.*\)"|VERSION="\1 (Mauvely OS)"|' \
-      -e "s|^PRETTY_NAME=.*|PRETTY_NAME=\"Mauvely OS (Fedora ${VERSION_ID} base)\"|" \
+      -e 's|^PRETTY_NAME=.*|PRETTY_NAME="Mauvely OS"|' \
       -e 's|^VARIANT=.*|VARIANT="Mauvely OS"|' \
       -e 's|^VARIANT_ID=.*|VARIANT_ID=mauvely|' \
       /usr/lib/os-release \
@@ -197,7 +198,7 @@ RUN . /usr/lib/os-release \
       >> /usr/lib/os-release \
  && grep -qx 'NAME="Mauvely OS"' /usr/lib/os-release \
  && grep -qx 'VARIANT_ID=mauvely' /usr/lib/os-release \
- && grep -q '^PRETTY_NAME="Mauvely OS ' /usr/lib/os-release \
+ && grep -qx 'PRETTY_NAME="Mauvely OS"' /usr/lib/os-release \
  && grep -qx 'ID=fedora' /usr/lib/os-release
 
 # Images from ghcr.io/mauvely/os must carry Mauvely's cosign signature
