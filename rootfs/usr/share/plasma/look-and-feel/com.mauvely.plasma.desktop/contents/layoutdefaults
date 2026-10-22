@@ -1,3 +1,13 @@
+# The window settings this preset carries. mauvely-session applies them after
+# it applies the preset, since Plasma 6.7's plasma-apply-lookandfeel applies
+# no layoutdefaults. The layout script writes the same keys, for System
+# Settings' own switch: change both together.
 [kwinrc][org.kde.kdecoration2]
 ButtonsOnLeft=MSE
 ButtonsOnRight=HIAX
+
+[breezerc][Common]
+CornerRadius=-1
+
+[breezerc][Style]
+MenuOpacity=100

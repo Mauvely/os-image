@@ -24,3 +24,13 @@ widgetStyle=Breeze
 
 [WM]
 activeFont=Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1
+
+# No running commands for anyone (Timur, 2026-10-22): the launcher's command
+# runner, Dolphin's terminal, and launcher files outside the menu's own folders.
+# Each key is pinned on its own, never the group: a pinned [KDE Action
+# Restrictions][$i] here would make the group immutable below mauvelyd's
+# /var/lib/mauvely-desktop/xdg, and the layout lock there would be ignored.
+[KDE Action Restrictions]
+run_command[$i]=false
+shell_access[$i]=false
+run_desktop_files[$i]=false

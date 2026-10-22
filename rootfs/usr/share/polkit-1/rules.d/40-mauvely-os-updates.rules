@@ -1,0 +1,12 @@
+// Mauvely OS: only an admin may stage an OS update by hand. Fedora's
+// org.projectatomic.rpmostree1.rules lets any local person run
+// `rpm-ostree upgrade`; here mauvelyd stages the image, and anyone outside
+// wheel is asked for an admin's password. This file sorts first, so its answer
+// wins.
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.projectatomic.rpmostree1.upgrade" ||
+         action.id == "org.projectatomic.rpmostree1.repo-refresh") &&
+        !subject.isInGroup("wheel")) {
+        return polkit.Result.AUTH_ADMIN;
+    }
+});

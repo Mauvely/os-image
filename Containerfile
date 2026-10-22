@@ -101,10 +101,14 @@ LABEL org.opencontainers.image.title="Mauvely OS" \
 # ships Firefox as an RPM, with its langpacks.
 # Discover's rpm-ostree backend goes too: the agent stages the image, and a
 # second updater would stage one behind it.
+# No terminal (Timur, 2026-10-22): Konsole, its part (Dolphin's terminal) and
+# DrKonqi, the crash reporter that needs Konsole. An admin assigns the Konsole
+# Flatpak to the collections that need one.
 # Inter and JetBrains Mono are the Mauvely look's interface and fixed-width fonts.
 # dnf leaves a cache, a log, a /run directory and, after an install, per-repo
 # state in /var/lib/dnf/repos, all of which `bootc container lint` flags.
 RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
+      konsole konsole-part plasma-drkonqi \
  && dnf -y install --setopt=install_weak_deps=False rsms-inter-fonts jetbrains-mono-fonts \
  && dnf clean all \
  && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log* /var/lib/dnf/repos
