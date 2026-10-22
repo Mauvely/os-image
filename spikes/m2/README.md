@@ -12,6 +12,7 @@ the image.
 | `plm-build.Containerfile` | Builds the patched RPMs from Fedora's signed source RPM |
 | `pam_toycode.c` | A toy module for the VM: `pam_toycode.so password` takes any answer as the password, so no real one is typed; bare, it asks "Code:" after a `pam_info` and accepts 123456. Never ship it |
 | `login-code-prompt.png`, `lock-code-prompt.png` | The greeter and the lock screen asking for the code on `mauvely-01`, 2026-10-22 |
+| `userdb-tile.png` | The greeter listing a person served only by an `/etc/userdb` drop-in ("M2 Spike Person") |
 
 To try it on the VM: `rpm-ostree usroverlay`, `rpm -Uvh --force` the two RPMs, install
 the toy module to `/usr/lib64/security/`, put the toy lines in place of
