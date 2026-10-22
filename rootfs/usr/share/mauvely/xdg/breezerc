@@ -1,0 +1,9 @@
+# Mauvely OS: Breeze's two settings that differ from KDE's in the Mauvely look.
+# Centred titles and rounded corners are already Breeze's defaults.
+# CornerRadius is os-image's patches/breeze/ (logical pixels; Breeze's own is 5).
+
+[Common]
+CornerRadius=8
+
+[Style]
+MenuOpacity=70

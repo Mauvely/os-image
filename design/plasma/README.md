@@ -1,8 +1,12 @@
 # The Mauvely look: phase 1 prototype (brief 25)
 
-What was live on Timur's development VM on 2026-10-21. It is a working record
-for phase 2, which turns it into look-and-feel packages in the image. Nothing
-here is in the image yet.
+What was live on Timur's development VM on 2026-10-21, kept as the record of
+phase 1. **Phase 2 shipped it in the image on 2026-10-22**: the shipped files
+are under `rootfs/` (`usr/share/plasma/look-and-feel/com.mauvely.*`, the colour
+schemes, the Plasma style, the wallpaper, the KDE defaults in
+`usr/share/mauvely/xdg`) and `patches/breeze/`, and they move on from here;
+this directory does not follow them. os-image's `HANDOFF.md` says what changed
+on the way.
 
 - **What it is:**
   - Mauvely light and dark global themes, switched by time of day;

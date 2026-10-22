@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [ { "Name": "Mauvely" } ],
+        "Category": "",
+        "Description": "Mauvely, dark. A centred taskbar, acrylic pop-ups and the violet accent.",
+        "Id": "com.mauvely.dark.desktop",
+        "License": "GPL-2.0+",
+        "Name": "Mauvely dark",
+        "Version": "0.1",
+        "Website": "https://mauvely.com"
+    },
+    "X-Plasma-APIVersion": "2"
+}

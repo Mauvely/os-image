@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [ { "Name": "Mauvely" } ],
+        "Category": "",
+        "Description": "Breeze with acrylic panels and pop-ups.",
+        "EnabledByDefault": true,
+        "Id": "mauvely",
+        "License": "LGPL",
+        "Name": "Mauvely",
+        "Version": "0.1"
+    },
+    "X-Plasma-API": "5.0"
+}

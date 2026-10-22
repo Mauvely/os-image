@@ -1,0 +1,4 @@
+# Mauvely OS: a graphical boot (brief 25). rhgb asks Plymouth for its splash, the
+# Mauvely theme; quiet keeps the kernel's messages off it. bootc adds these at
+# install, and to an installed machine at its next update.
+kargs = ["rhgb", "quiet"]

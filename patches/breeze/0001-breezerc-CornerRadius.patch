@@ -1,0 +1,40 @@
+Breeze: a breezerc key for the window corner radius (Mauvely OS)
+
+Breeze rounds windows at Frame_FrameRadius (2.5) times the small spacing,
+5 px on Wayland, and has no setting for it. This adds one:
+
+  breezerc [Common] CornerRadius=<logical pixels>
+
+Unset or negative keeps Breeze's own radius. Mauvely OS sets 8 in
+/usr/share/mauvely/xdg/breezerc; the Plasma preset writes -1.
+
+Made against Breeze 6.7.5 (plasma-breeze-6.7.5-1.fc44). os-image applies it
+with `patch -p1 --fuzz=0`; HANDOFF.md says how to refresh it.
+
+--- a/kdecoration/breezedecoration.cpp
++++ b/kdecoration/breezedecoration.cpp
+@@ -854,7 +854,9 @@
+     // On X11, the smallSpacing value is used for scaling.
+     // On Wayland, this value has constant factor of 2.
+     // Removing it will break radius scaling on X11.
+-    m_scaledCornerRadius = KDecoration3::snapToPixelGrid(Metrics::Frame_FrameRadius * settings()->smallSpacing(), window()->nextScale());
++    // A CornerRadius in breezerc, in logical pixels, replaces it.
++    const qreal radius = m_internalSettings->cornerRadius() >= 0 ? m_internalSettings->cornerRadius() : Metrics::Frame_FrameRadius * settings()->smallSpacing();
++    m_scaledCornerRadius = KDecoration3::snapToPixelGrid(radius, window()->nextScale());
+ }
+ 
+ void Decoration::updateScale()
+--- a/kdecoration/breezesettingsdata.kcfg
++++ b/kdecoration/breezesettingsdata.kcfg
+@@ -42,6 +42,11 @@
+     <entry name="RoundedCorners" type = "Bool">
+       <default>true</default>
+     </entry>
++
++    <!-- window corner radius, in logical pixels; negative keeps Breeze's own (Frame_FrameRadius in units of small spacing) -->
++    <entry name="CornerRadius" type = "Double">
++      <default>-1</default>
++    </entry>
+   </group>
+ 
+   <group name="Windeco">

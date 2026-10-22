@@ -1,0 +1,48 @@
+[Plymouth Theme]
+Name=Mauvely
+Description=The Mauvely mark, with a spinner below it.
+ModuleName=two-step
+
+[two-step]
+ImageDir=/usr/share/plymouth/themes/mauvely
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.45
+HorizontalAlignment=.5
+VerticalAlignment=.7
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.7
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.6
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x12142e
+BackgroundEndColor=0x12142e
+ProgressBarBackgroundColor=0x2b2741
+ProgressBarForegroundColor=0x968ae0
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[reboot]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing updates
+SubTitle=Keep your computer on.
+
+[firmware-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Updating firmware
+SubTitle=Keep your computer on.

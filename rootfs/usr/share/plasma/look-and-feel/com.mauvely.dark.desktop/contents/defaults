@@ -1,0 +1,33 @@
+[kdeglobals][KDE]
+widgetStyle=Breeze
+
+[kdeglobals][General]
+ColorScheme=MauvelyDark
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[kdeglobals][WM]
+# Plasma 6.7's KLookAndFeelManager only notices a package's fonts if [kdeglobals][WM] has
+# one of font/fixed/menuFont/... (it looks in the wrong group), so "font" is repeated here.
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+activeFont=Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1
+
+[kdeglobals][Icons]
+Theme=breeze-dark
+
+[plasmarc][Theme]
+name=mauvely
+
+[Wallpaper]
+Image=Mauvely
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+BorderSize=None

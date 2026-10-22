@@ -1,0 +1,5 @@
+# Mauvely OS: the lock screen shows the Mauvely wallpaper, light or dark with the colour scheme.
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file:///usr/share/wallpapers/Mauvely/
+PreviewImage=file:///usr/share/wallpapers/Mauvely/

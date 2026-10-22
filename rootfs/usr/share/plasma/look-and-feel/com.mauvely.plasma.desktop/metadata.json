@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [ { "Name": "Mauvely" } ],
+        "Category": "",
+        "Description": "Plasma as KDE ships it, with the Mauvely accent.",
+        "Id": "com.mauvely.plasma.desktop",
+        "License": "GPL-2.0+",
+        "Name": "Plasma",
+        "Version": "0.1",
+        "Website": "https://mauvely.com"
+    },
+    "X-Plasma-APIVersion": "2"
+}

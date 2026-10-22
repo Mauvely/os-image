@@ -11,10 +11,11 @@ superproject. Read it before changing anything here.
 
 | Path | Holds |
 |---|---|
-| `Containerfile` | The image: builder stages for `mauvelyd` and `mauvely-signin`, then Kinoite plus `rootfs/` |
+| `Containerfile` | The image: builder stages for `mauvelyd`, `mauvely-signin` and Breeze's window decoration, then Kinoite plus `rootfs/` |
 | `agent.ref` | The os-agent commit the image is built from. Moving it is a deliberate commit |
 | `installer.ref` | The os-installer commit `mauvely-signin`, the sign-in window, is built from (its `signin/`). Moving it is a deliberate commit |
-| `rootfs/` | Files copied over `/` in the image: the seal unit and script, the bootc install config, branding |
+| `rootfs/` | Files copied over `/` in the image: the seal unit and script, the bootc install config, branding, the Mauvely look (global themes, KDE defaults in `/usr/share/mauvely/xdg`, Plymouth theme) |
+| `patches/breeze/` | Applied to Fedora's Breeze source in the image's build: the `CornerRadius` key behind the look's 8 px window corners |
 | `scripts/build.sh` | The one way to build, locally and in CI. Warns when `../agent` is not at `agent.ref`, or `../installer` not at `installer.ref` |
 | `scripts/bump-base.sh` | Moves the Kinoite pin to the newest build of the same release. The weekly run of `publish-image.yml` uses it |
 | `scripts/publish-flatpak.sh` | Bundles from the release feed into the signed Flatpak repo. `test-publish-flatpak.sh` tries it with a throwaway key |
@@ -22,6 +23,7 @@ superproject. Read it before changing anything here.
 | `keys/` | The public halves: `mauvely-flatpak.gpg` for the Flatpak remote, `cosign.pub` for the image |
 | `.github/workflows/` | `build.yml` (build and lint, pushes nowhere), and `publish-image.yml` and `publish-flatpak.yml` (by hand, apart from the weekly `next`) |
 | `spikes/` | The P1 spike scripts, reused for VM tests. `proof/` holds what the runs showed |
+| `design/plasma/` | Brief 25's phase-1 prototype of the look, and the generators for its colour schemes and wallpaper |
 
 ## Rules
 

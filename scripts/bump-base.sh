@@ -11,9 +11,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 repo=quay.io/fedora-ostree-desktops/kinoite
-pin="$(sed -n "s|^FROM $repo:\([0-9]*\.[0-9]\{8\}\.[0-9]*\)\$|\1|p" Containerfile)"
+pin="$(sed -n "s|^FROM $repo:\([0-9]*\.[0-9]\{8\}\.[0-9]*\) AS kinoite\$|\1|p" Containerfile)"
 [ "$(wc -l <<<"$pin")" -eq 1 ] && [ -n "$pin" ] \
-  || { echo "bump-base: expected one 'FROM $repo:<release>.<date>.<n>' line in the Containerfile" >&2; exit 1; }
+  || { echo "bump-base: expected one 'FROM $repo:<release>.<date>.<n> AS kinoite' line in the Containerfile" >&2; exit 1; }
 release="${pin%%.*}"
 
 # Quay's API lists the newest tags first; a dated build carries the multi-arch
@@ -33,6 +33,6 @@ print(max(tags, key=lambda t: [int(p) for p in t.split(".")]))
 key() { tr . ' ' <<<"$1" | awk '{ printf "%s%08d%04d", $1, $2, $3 }'; }
 [[ "$(key "$newest")" > "$(key "$pin")" ]] || exit 0
 
-sed -i "s|^FROM $repo:$pin\$|FROM $repo:$newest|" Containerfile
-grep -qx "FROM $repo:$newest" Containerfile
+sed -i "s|^FROM $repo:$pin AS kinoite\$|FROM $repo:$newest AS kinoite|" Containerfile
+grep -qx "FROM $repo:$newest AS kinoite" Containerfile
 echo "$newest"

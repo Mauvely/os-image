@@ -1,0 +1,36 @@
+[kdeglobals][KDE]
+widgetStyle=Breeze
+
+[kdeglobals][General]
+ColorScheme=MauvelyPlasma
+font=Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=Noto Sans Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Noto Sans,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[kdeglobals][WM]
+# Plasma 6.7's KLookAndFeelManager only notices a package's fonts if [kdeglobals][WM] has
+# one of font/fixed/menuFont/... (it looks in the wrong group), so "font" is repeated here.
+font=Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+activeFont=Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[kdeglobals][Icons]
+Theme=breeze
+
+[plasmarc][Theme]
+name=default
+
+[Wallpaper]
+Image=Next
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+BorderSize=Normal
+
+[ksplashrc][KSplash]
+Theme=org.kde.breeze.desktop

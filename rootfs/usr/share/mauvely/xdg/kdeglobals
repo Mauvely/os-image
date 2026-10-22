@@ -1,0 +1,26 @@
+# Mauvely OS: the image's KDE defaults (brief 25), ahead of Fedora's kde-settings
+# profile in XDG_CONFIG_DIRS (/etc/profile.d/mauvely-xdg.sh).
+# A new account starts on Mauvely light by day and Mauvely dark by night.
+# The fonts and colour scheme repeat Mauvely light's for anything that reads them
+# without a session's kdedefaults (root's apps, for one).
+
+[General]
+ColorScheme=MauvelyLight
+font=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=JetBrains Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[Icons]
+Theme=breeze
+
+[KDE]
+LookAndFeelPackage=com.mauvely.light.desktop
+AutomaticLookAndFeel=true
+DefaultLightLookAndFeel=com.mauvely.light.desktop
+DefaultDarkLookAndFeel=com.mauvely.dark.desktop
+widgetStyle=Breeze
+
+[WM]
+activeFont=Inter,10,-1,5,600,0,0,0,0,0,0,0,0,0,0,1

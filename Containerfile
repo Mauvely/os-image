@@ -6,6 +6,14 @@
 # named contexts and warns when either checkout is not the commit pinned in
 # agent.ref or installer.ref.
 
+# ── the base ─────────────────────────────────────────────────────────────────
+# The tag is pinned to a dated build, never `latest` or a bare release number.
+# publish-image.yml's weekly run moves it to Fedora's newest 44 build
+# (scripts/bump-base.sh, which looks for this one line). Moving to 45 is a
+# deliberate commit; it is still in Beta. The Breeze stage and the image both
+# start from it.
+FROM quay.io/fedora-ostree-desktops/kinoite:44.20261019.0 AS kinoite
+
 # ── mauvelyd ─────────────────────────────────────────────────────────────────
 # Built on Fedora 44, the base's own release, so the binary links the same glibc.
 # A binary from the host needs a newer one and does not start.
@@ -45,12 +53,43 @@ RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREF
  && QT_QPA_PLATFORM=offscreen QTWEBENGINE_DISABLE_SANDBOX=1 build/bin/tst_signin \
  && DESTDIR=/out cmake --install build --component signin
 
+# ── Breeze's window decoration, with a corner radius ─────────────────────────
+# Breeze rounds windows at 5 px and has no setting for it. patches/breeze/ adds
+# breezerc [Common] CornerRadius (logical pixels; Breeze's own when unset), and
+# the image sets 8 (brief 25). This stage builds only the decoration plugin,
+# from Fedora's signed source RPM of the plasma-breeze in the base, against the
+# base's own libraries: every installed package is version-locked first, so
+# the build dependencies come at the base's versions (updates-archive keeps
+# the older ones). It fails, rather than build something else, when Fedora no
+# longer serves that source or the patch no longer applies; HANDOFF.md says
+# how to refresh the patch.
+FROM kinoite AS breeze-build
+ARG CMAKE_BUILD_PARALLEL_LEVEL=8
+COPY patches/breeze/ /patches/
+RUN vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}' plasma-breeze)" \
+ && dnf -q versionlock add $(rpm -qa --qf '%{NAME}\n' | sort -u) >/dev/null \
+ && dnf -y install --setopt=install_weak_deps=False rpm-build ninja-build \
+ && mkdir -p /src && cd /src \
+ && { dnf download --source --enablerepo=fedora-source --enablerepo=updates-source "plasma-breeze-$vr" \
+      || { echo "breeze-build: Fedora no longer serves the source of plasma-breeze-$vr; move the base (scripts/bump-base.sh)" >&2; exit 1; }; } \
+ && rpmkeys --dbpath /src/keys --import "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$(rpm -E %fedora)-primary" \
+ && rpmkeys --dbpath /src/keys --checksig "plasma-breeze-$vr.src.rpm" | grep -q 'signatures OK' \
+ && rpm -i --define '_topdir /src/rpmbuild' "plasma-breeze-$vr.src.rpm" \
+ && dnf -y builddep --setopt=install_weak_deps=False --without kf5 /src/rpmbuild/SPECS/plasma-breeze.spec \
+ && rpmbuild --define '_topdir /src/rpmbuild' --without kf5 -bp /src/rpmbuild/SPECS/plasma-breeze.spec \
+ && cd "$(find /src/rpmbuild/BUILD -maxdepth 2 -type d -name "breeze-${vr%-*}")" \
+ && for p in /patches/*.patch; do \
+      patch -p1 --forward --batch --fuzz=0 < "$p" \
+        || { echo "breeze-build: $p no longer applies to plasma-breeze-$vr; refresh it (HANDOFF.md)" >&2; exit 1; }; \
+    done \
+ && eval "$(rpm -E '%{set_build_flags}')" \
+ && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr \
+      -DKDE_INSTALL_USE_QT_SYS_PATHS=ON -DBUILD_QT6=ON -DBUILD_QT5=OFF -DBUILD_TESTING=OFF \
+ && cmake --build build --target breezedecoration \
+ && mkdir /out && cp build/bin/org.kde.breeze.so /out/ && strip -g /out/org.kde.breeze.so
+
 # ── the image ────────────────────────────────────────────────────────────────
-# The tag is pinned to a dated build, never `latest` or a bare release number.
-# publish-image.yml's weekly run moves it to Fedora's newest 44 build
-# (scripts/bump-base.sh). Moving to 45 is a deliberate commit; it is still in
-# Beta.
-FROM quay.io/fedora-ostree-desktops/kinoite:44.20261019.0
+FROM kinoite
 
 LABEL org.opencontainers.image.title="Mauvely OS" \
       org.opencontainers.image.source="https://github.com/Mauvely/os-image" \
@@ -62,10 +101,13 @@ LABEL org.opencontainers.image.title="Mauvely OS" \
 # ships Firefox as an RPM, with its langpacks.
 # Discover's rpm-ostree backend goes too: the agent stages the image, and a
 # second updater would stage one behind it.
-# dnf leaves a cache, a log and a /run directory that `bootc container lint` flags.
+# Inter and JetBrains Mono are the Mauvely look's interface and fixed-width fonts.
+# dnf leaves a cache, a log, a /run directory and, after an install, per-repo
+# state in /var/lib/dnf/repos, all of which `bootc container lint` flags.
 RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
+ && dnf -y install --setopt=install_weak_deps=False rsms-inter-fonts jetbrains-mono-fonts \
  && dnf clean all \
- && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log*
+ && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log* /var/lib/dnf/repos
 
 # The agent, and mauvely-session, which says in each person's session when a
 # restart will finish an update. Both only start when /etc/mauvely/server
@@ -91,6 +133,45 @@ RUN rpm -q qt6-qtwebengine qt6-qtsvg \
  && grep -qx 'NoDisplay=true' /usr/share/applications/com.mauvely.signin.desktop \
  && gtk-update-icon-cache -f /usr/share/icons/hicolor \
  && grep -q com.mauvely.signin /usr/share/icons/hicolor/icon-theme.cache
+
+# The Mauvely look (brief 25), from rootfs/: the global themes Mauvely light and
+# Mauvely dark, switched by time of day, and the Plasma preset (Breeze with the
+# violet accent); their colour schemes, the "mauvely" Plasma style, the
+# wallpaper, and the start glyph (in the icon cache rebuilt above). The image's
+# KDE defaults are /usr/share/mauvely/xdg, which /etc/profile.d/mauvely-xdg.sh
+# puts ahead of Fedora's profile in XDG_CONFIG_DIRS; HANDOFF.md has why there.
+# - Breeze's decoration is replaced with the one built above. It must load with
+#   every symbol resolved against the image's libraries.
+# - The Plasma preset borrows Breeze's own splash and previews: a global
+#   theme's splash setting only applies when the package has a splash.
+# - Light and dark share their layout and splash, byte for byte.
+# - The last three checks read the defaults the way a session does, from a
+#   shell with no XDG_CONFIG_DIRS of its own: Mauvely's must win over Fedora's.
+COPY --from=breeze-build /out/org.kde.breeze.so /usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so
+RUN so=/usr/lib64/qt6/plugins/org.kde.kdecoration3/org.kde.breeze.so \
+ && python3 -I -c 'import ctypes, os, sys; ctypes.CDLL(sys.argv[1], os.RTLD_NOW)' "$so" \
+ && grep -qa CornerRadius "$so" \
+ && lnf=/usr/share/plasma/look-and-feel \
+ && cp -r "$lnf/org.kde.breeze.desktop/contents/splash" "$lnf/org.kde.breeze.desktop/contents/previews" \
+      "$lnf/com.mauvely.plasma.desktop/contents/" \
+ && for d in layoutdefaults layouts splash; do \
+      diff -r "$lnf/com.mauvely.light.desktop/contents/$d" "$lnf/com.mauvely.dark.desktop/contents/$d"; \
+    done \
+ && for id in light dark plasma; do \
+      kpackagetool6 -t Plasma/LookAndFeel -g -l | grep -qx "com.mauvely.$id.desktop"; \
+    done \
+ && for f in "$lnf"/com.mauvely.*/metadata.json /usr/share/plasma/desktoptheme/mauvely/metadata.json \
+      /usr/share/wallpapers/Mauvely/metadata.json; do \
+      python3 -I -c 'import json, sys; json.load(open(sys.argv[1]))' "$f"; \
+    done \
+ && fc-match -f '%{family}\n' 'Inter' | grep -q '^Inter' \
+ && fc-match -f '%{family}\n' 'JetBrains Mono' | grep -q '^JetBrains Mono' \
+ && grep -q com.mauvely.start /usr/share/icons/hicolor/icon-theme.cache \
+ && read_default() { env -u XDG_CONFIG_DIRS sh -c '. /etc/profile.d/mauvely-xdg.sh && kreadconfig6 "$@"' sh "$@"; } \
+ && test "$(read_default --file kdeglobals --group KDE --key LookAndFeelPackage)" = com.mauvely.light.desktop \
+ && read_default --file kicker-extra-favoritesrc --group General --key Prepend | grep -q '^preferred://browser;org.kde.dolphin.desktop;' \
+ && test "$(read_default --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key Image)" \
+      = file:///usr/share/wallpapers/Mauvely/
 
 # Mauvely OS, and nothing more: the name, the About page and the logo. ID and
 # VERSION_ID stay Fedora's, so dnf, flatpak and bootc are unaffected, and so do
@@ -145,13 +226,27 @@ RUN systemctl enable mauvelyd.service mauvely-seal.service \
       flatpak-add-fedora-repos.service \
       rpm-ostree-countme.timer rpm-ostree-countme.service
 
+# The boot splash (brief 25): Plymouth's two-step plugin with the Mauvely mark
+# where the splash screen puts it, on the same ground. The spinner, the disk
+# unlock prompt's images and the rest are Fedora's spinner theme's; only the
+# watermark is Mauvely's. `rhgb quiet` come from
+# /usr/lib/bootc/kargs.d/10-mauvely-splash.toml, and the initramfs rebuilt
+# below carries the theme.
+RUN t=/usr/share/plymouth/themes/mauvely \
+ && find /usr/share/plymouth/themes/spinner -maxdepth 1 -name '*.png' ! -name watermark.png -exec cp -t "$t" {} + \
+ && test -f "$t/throbber-0001.png" && test -f "$t/lock.png" && test -f "$t/watermark.png" \
+ && sed -i 's/^Theme=bgrt$/Theme=mauvely/' /usr/share/plymouth/plymouthd.defaults \
+ && test "$(plymouth-set-default-theme)" = mauvely
+
 # The initramfs, rebuilt with rootfs/usr/lib/dracut/dracut.conf.d/90-mauvely-
 # initramfs.conf so that two kernels fit in /boot. Fails the build past 150 MB,
-# which is about where an update stops fitting next to the booted kernel, and
-# without the ostree module, without which nothing boots.
+# which is about where an update stops fitting next to the booted kernel,
+# without the ostree module, without which nothing boots, and without the
+# Plymouth theme.
 RUN kver="$(ls /usr/lib/modules)" \
  && dracut --force --no-hostonly --reproducible --kver "$kver" "/usr/lib/modules/$kver/initramfs.img" \
  && lsinitrd -m "/usr/lib/modules/$kver/initramfs.img" | grep -qx ostree \
+ && lsinitrd "/usr/lib/modules/$kver/initramfs.img" | grep -q 'usr/share/plymouth/themes/mauvely/watermark.png' \
  && size="$(stat -c %s "/usr/lib/modules/$kver/initramfs.img")" \
  && echo "initramfs: $size bytes" \
  && [ "$size" -lt 157286400 ]
