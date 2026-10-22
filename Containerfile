@@ -115,12 +115,14 @@ RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
 
 # The agent, and mauvely-session, which says in each person's session when a
 # restart will finish an update. Both only start when /etc/mauvely/server
-# exists, which the installer writes. The seal unit and its script come in with
-# rootfs/.
+# exists, which the installer writes. mauvely-look runs mauvely-session once at
+# each sign-in, before Plasma's shell: the collection's preset and a panel
+# reset. The seal unit and its script come in with rootfs/.
 COPY --from=agent-build /src/target/release/mauvelyd /usr/bin/mauvelyd
 COPY --from=agent-build /src/target/release/mauvely-session /usr/bin/mauvely-session
 COPY --from=agent dist/mauvelyd.service /usr/lib/systemd/system/mauvelyd.service
 COPY --from=agent dist/mauvely-session.service /usr/lib/systemd/user/mauvely-session.service
+COPY --from=agent dist/mauvely-look.service /usr/lib/systemd/user/mauvely-look.service
 COPY rootfs/ /
 
 # The sign-in window: /usr/bin/mauvely-signin, its desktop file (com.mauvely.signin,
@@ -224,7 +226,7 @@ RUN sed -i 's/^UseUnattendedUpdates=true$/UseUnattendedUpdates=false/' /etc/xdg/
 # - masked: rpm-ostree-countme, which reports each machine to Fedora's mirrors.
 # Plasma Setup stays enabled: in milestone 1 it makes the first local account.
 RUN systemctl enable mauvelyd.service mauvely-seal.service \
- && systemctl --global enable mauvely-session.service \
+ && systemctl --global enable mauvely-session.service mauvely-look.service \
  && systemctl mask \
       bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service \
       rpm-ostreed-automatic.timer rpm-ostreed-automatic.service \
