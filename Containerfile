@@ -21,7 +21,8 @@ FROM quay.io/fedora-ostree-desktops/kinoite:44.20261019.0 AS kinoite
 # A binary from the host needs a newer one and does not start.
 FROM quay.io/fedora/fedora:44 AS agent-build
 ARG CARGO_BUILD_JOBS=8
-RUN dnf -y install --setopt=install_weak_deps=False cargo gcc && dnf clean all
+# pam-devel: pam_mauvely links against the system's libpam.
+RUN dnf -y install --setopt=install_weak_deps=False cargo gcc pam-devel && dnf clean all
 WORKDIR /src
 # Named paths, not the whole context: a local checkout carries a target/ of
 # several gigabytes.
@@ -230,6 +231,7 @@ RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
 COPY --from=agent-build /src/target/release/mauvelyd /usr/bin/mauvelyd
 COPY --from=agent-build /src/target/release/mauvely-session /usr/bin/mauvely-session
 COPY --from=agent dist/mauvelyd.service /usr/lib/systemd/system/mauvelyd.service
+COPY --from=agent dist/mauvely-login.service /usr/lib/systemd/system/mauvely-login.service
 COPY --from=agent dist/mauvely-session.service /usr/lib/systemd/user/mauvely-session.service
 COPY --from=agent dist/mauvely-look.service /usr/lib/systemd/user/mauvely-look.service
 COPY rootfs/ /
@@ -371,7 +373,7 @@ RUN /usr/libexec/mauvely/mauvely-browser-host < /dev/null \
 #   boot. Remotes come from the agent, out of the server's check-in answer.
 # - masked: rpm-ostree-countme, which reports each machine to Fedora's mirrors.
 # Plasma Setup stays enabled: in milestone 1 it makes the first local account.
-RUN systemctl enable mauvelyd.service mauvely-seal.service \
+RUN systemctl enable mauvelyd.service mauvely-login.service mauvely-seal.service \
  && systemctl enable var-lib-flatpak-extension-org.chromium.Chromium.Extension.mauvely-x86_64-1.mount \
       var-lib-flatpak-extension-org.mozilla.firefox.systemconfig-x86_64-stable.mount \
  && systemctl --global enable mauvely-session.service mauvely-look.service \
