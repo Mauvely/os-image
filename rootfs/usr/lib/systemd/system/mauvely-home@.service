@@ -1,0 +1,22 @@
+[Unit]
+Description=Mauvely home folder for %i
+Documentation=https://github.com/Mauvely/os-image
+# mauvelyd starts this after a person's first sign-in and waits for it
+# (brief 26): mauvelyd itself cannot write /home. The instance is the
+# username, and it is the only thing a path here is built from. It only
+# ever creates a home. One that exists is left exactly as it is.
+ConditionPathExists=!/home/%i
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# The instance must be a person: a username by systemd's strict rule, and a
+# userdb record with a uid in 20000-59999.
+ExecStartPre=/usr/libexec/mauvely/home-check %i
+# systemd-tmpfiles started by systemd runs as systemd_tmpfiles_t and gives each
+# path the policy's label: user_home_dir_t for the folder. C copies /etc/skel
+# and makes the folder 0700 and the person's; Z gives the person what C
+# copied, which is root's, and restores the labels inside.
+ExecStart=/usr/bin/systemd-tmpfiles --create -
+StandardInputText=C /home/%i 0700 %i %i - /etc/skel
+StandardInputText=Z /home/%i - %i %i -

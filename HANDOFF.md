@@ -1,5 +1,232 @@
 # Handoff
 
+## Signing in with a Mauvely account: os-image's half (brief 26, M2; 2026-10-22)
+
+Brief 26 is website-internal `docs/launch/plans/26-os-login.md` (on `staging`).
+os-agent builds the other half at the same time: mauvelyd's login socket and
+`pam_mauvely`. `agent.ref` was not moved; it moves to os-agent's commit when
+both halves are in. **Built locally, never booted.**
+
+### What ships
+
+| | |
+|---|---|
+| `plm-build` | Plasma Login Manager from Fedora's signed source RPM of the base's exact version, with `patches/plasma-login-manager/`, as `6.7.5-1.mauvely1.fc44`. Both RPMs (`plasma-login-manager`, `kcm-plasmalogin`) replace the base's |
+| `0001-second-prompt.patch` | The spike's patch (`spikes/m2/plm-second-prompt.patch`), byte for byte: a PAM question after the password reaches the greeter as a second field. 16 files, +238 −10 |
+| `0002-people-json.patch` | The greeter follows `/var/lib/mauvely-desktop/people.json`. 7 files, +192 −1. Independent of 0001: it applies with `--fuzz=0` with or without it |
+| `pam_mauvely` | `/usr/lib64/security/pam_mauvely.so`, from the agent at `agent.ref` (`target/release/libpam_mauvely.so`), when that agent builds one |
+| authselect | The vendor profile `mauvely` (`/usr/share/authselect/vendor/mauvely/`), made from `local` at build, selected with the base's features (`with-silent-lastlog with-mdns4`) |
+| `selinux/` | The `mauvely` policy module, installed with `semodule`; the package also stays at `/usr/share/selinux/packages/mauvely.pp` |
+| `mauvely-home@.service` | With `/usr/libexec/mauvely/home-check`, in `rootfs/` |
+
+### The greeter and `people.json`
+
+- **shared:** no tiles, the username field (PLM's own "list is empty" path).
+- **assigned:** the assigned person's tile alone, preselected, with the name
+  from the file, even before they have an account here. "Other…" (PLM's own)
+  types any name, for an admin; its "List Users" goes back.
+- **both:** the organisation's name under the clock, Inter at 1.4× the default
+  size, 80% opacity, with the clock's shadow.
+- **no file:** today's greeter. So is a file that is not JSON or names another
+  mode. `assigned` with no valid username shows the shared screen.
+- How: `DevicePeople` in the greeter's C++ reads the file once at start (64 KiB
+  at most; the username must pass systemd's strict rule; names are cut to 80
+  characters). `UserModel::showOnly()` narrows the list; only the greeter calls
+  it, so the KCM's user list is unchanged. QML sees `DevicePeople.organisation`.
+- **The mock:** `plasma-login-greeter --test` with
+  `PLASMALOGIN_MOCK_PEOPLE=<file>`. With the variable unset it is today's
+  greeter. `PLASMALOGIN_MOCK_CODE=1` still adds the code question.
+- **Copy:** the organisation's name alone. Nothing says "managed by": the name
+  is the fact (CONTENT FUNDAMENTALS, "say it once, then stop").
+- The greeter can read the file under SELinux whether it runs as `xdm_t` or
+  `unconfined_t` (both may read `var_lib_t`, by policy query).
+
+### The PAM wiring, and what each service does now
+
+`system-auth` and `password-auth` gain, before `pam_unix` in both `auth` and
+`account`:
+
+```
+[success=2 default=ignore]               pam_localuser.so
+[success=1 default=ignore]               pam_localuser.so file=/usr/lib/passwd
+[success=done ignore=ignore default=die] pam_mauvely.so
+```
+
+**The second `pam_localuser` line is a change to the brief's two lines.** On
+this image only `root` is in `/etc/passwd`; every system account, the login
+screen's own `plasmalogin` among them, is in `/usr/lib/passwd` (nss-altfiles).
+With the brief's lines alone, those accounts would reach `pam_mauvely`, and a
+dead daemon could stop the greeter's own user manager. With both lines,
+`pam_mauvely` sees only names that are in neither file: people, and names
+nobody has.
+
+| Service | Who calls PAM, in which domain | Now |
+|---|---|---|
+| `plasmalogin` | `plasmalogin-helper`, `xdm_t` | `auth substack password-auth`: pam_mauvely, which asks the code (this service only). `done` ends the substack, so the wallet lines and `postlogin` still run. `account include password-auth`: pam_mauvely |
+| `plasmalogin-autologin` | the helper, `xdm_t` | auth is `pam_permit`; `account include system-auth`: pam_mauvely |
+| `plasmalogin-greeter` | the helper, for the `plasmalogin` user | unchanged (`pam_permit`, no authselect file) |
+| `kde` (lock screen) | `kscreenlocker_greet`, as the person, `unconfined_t` | `password-auth`: the password against the cache, then account |
+| `sudo`, `sudo-i` | `sudo`, `unconfined_t` | `system-auth`: password and account |
+| `polkit-1` | `polkit-agent-helper-1`: setuid from the person's agent, so `unconfined_t`; `policykit_auth_t` if it is ever socket-activated (its socket is disabled in the image) | `system-auth` |
+| `login` | `login`, `local_login_t` | `auth substack system-auth`, `account include system-auth`: the account phase is where pam_mauvely refuses people who are not device admins (brief 28) |
+| `sshd` | `sshd-session`, `sshd_session_t` (OpenSSH 10 runs PAM there, not in `sshd_t`) | `password-auth`. sshd is not enabled in the image |
+| `su`, `su-l` | `unconfined_t` | `system-auth` for the target's password; root skips account |
+| `systemd-user` | PID 1's child, `init_t` | `account sufficient pam_unix.so` comes first and passes a userdb person (`!*`), so pam_mauvely is not reached; if pam_unix ever fails it would be, in `init_t`, which has no rule (fails closed) |
+| `systemd-run0`, `runuser` | | unchanged: no `system-auth` in auth or account |
+| `cups`, `chfn`, `chsh`, `vlock`, `kcheckpass`, `kscreensaver`, `remote` | | through `system-auth`/`password-auth`. A person there fails closed (`cupsd_t` and the rest have no rule); local accounts are unaffected |
+| `fingerprint-auth`, `smartcard-auth` (`kde-fingerprint`, `kde-smartcard`) | | unchanged: they never reach pam_mauvely. A person with an enrolled finger could unlock with it alone. Fingerprints are later (brief 26) |
+| `passwd` | | `password` only, unchanged; people change their password on the web |
+
+**Tried in a container** (the built image, as root, no SELinux), with a tiny
+PAM client and a stand-in module that says yes to one person, no to another
+and `PAM_IGNORE` to a third, over `sudo login plasmalogin kde polkit-1 sshd
+systemd-user`:
+- **with no module** (this `agent.ref`): `root`, a local `alex` and
+  `plasmalogin` pass both phases, a wrong password fails, and all three people
+  get "Module is unknown";
+- **with the stand-in:** it was called only for the three people, never for
+  `root`, `alex` or `plasmalogin`; yes ended the stack, no refused it, and
+  `PAM_IGNORE` fell through to `pam_unix` (account passed on `!*`, auth
+  failed).
+
+### The SELinux module (`selinux/mauvely.te`, `.fc`)
+
+- `mauvely_var_run_t` for `/run/mauvely(/.*)?` (the agent's
+  `RuntimeDirectory=`; systemd labels it from `file_contexts`), and
+  `mauvely_auth_sock_t` for the socket alone, by
+  `type_transition unconfined_service_t mauvely_var_run_t:sock_file mauvely_auth_sock_t "auth.sock"`
+  and the file context `/run/mauvely/auth\.sock -s`.
+- `stream_connect_pattern` (search the directory, write the socket,
+  `connectto` `unconfined_service_t`) for exactly `xdm_t`, `local_login_t`,
+  `sshd_session_t`, `policykit_auth_t`. Everything else that calls PAM runs
+  `unconfined_t`.
+- **Checked with setools** against the built policy: the domains that can
+  search the directory, write the socket and connect to mauvelyd are those
+  four, `kernel_t`, and the 91 unconfined domains. `sshd_t`, `policykit_t`,
+  `systemd_logind_t` and `init_t` cannot.
+- **`installed.json` changes label** to `mauvely_var_run_t` with its directory;
+  mauvely-session reads it as `unconfined_t`, which is unaffected.
+- **Machines whose `/etc/selinux` was changed locally** (the dev VM had
+  `semanage` runs for brief 28): bootc keeps their policy files, but libostree
+  runs `semodule --refresh` on such a deployment (read from its strings, not
+  seen), which takes in the new module from the merged store. Check
+  `semodule -l | grep mauvely` there first. If it is missing,
+  `semodule -i /usr/share/selinux/packages/mauvely.pp`.
+
+### Home folders: `mauvely-home@<username>.service`
+
+- `ConditionPathExists=!/home/%i`: it only ever creates. An existing home is
+  left exactly as it is, and the start counts as a success.
+- `home-check %i` first: the name must pass systemd's strict rule (≤ 31
+  characters, no dots) and be a user with a uid in 20000–59999. root, local
+  accounts, unknown names, `a.b` and `..` fail the unit before anything is made.
+- Then `systemd-tmpfiles --create -`, fed by `StandardInputText=`:
+  `C /home/%i 0700 %i %i - /etc/skel` and `Z /home/%i - %i %i -`. A `d` line
+  and a `C` line for one path are a duplicate to tmpfiles (the second is
+  ignored), so `C` makes the folder and its mode, and `Z` gives the person
+  what it copied and restores the labels.
+- `%i`, not `%I`: `%I` turns `-` into `/`. mauvelyd must start the unit with
+  the plain username, not `systemd-escape`d.
+- **Tried in a systemd container** (the base image, booted with `/sbin/init`,
+  userdb drop-ins): `ptest` and `p-test` got `/home/<name>` 0700 with skel,
+  all theirs; a second start was skipped; `root`, a uid-1500 user, an unknown
+  name, `a.b` and `..` all failed. Labels could not be seen there (the host
+  has no SELinux).
+
+### Decisions
+
+- The second `pam_localuser` line, above.
+- **`pam_mauvely` ships exactly when mauvelyd serves the socket.** The image
+  greps mauvelyd for `auth.sock`: with it, the module must exist, load with
+  `RTLD_NOW` against `libpam`, and export `pam_sm_authenticate` and
+  `pam_sm_acct_mgmt`; without it, there must be no module. The current
+  `agent.ref` has neither, so `main` builds, and the PAM lines refuse nobody
+  who could sign in before (tried, above). The library is taken from
+  `target/release/libpam_mauvely.so`: if os-agent names its crate's library
+  otherwise, the build fails here and says so.
+- **The PLM RPMs go in with `rpm -Uvh`, in the same step as the base's `dnf
+  remove`.** A plain upgrade, since `.mauvely1` sorts above the base's release:
+  nothing is forced. Each step that touches packages writes the whole RPM
+  database (about 100 MB) into its layer; the first build did it in a step of
+  its own and the image grew by that.
+- **The patches go into the spec as `Patch9001`, `Patch9002`** after Fedora's
+  own, applied by `%autosetup -p1` with `_default_patch_fuzz 0`. The stage first
+  applies them to a prepared tree, one by one, so the one that fails is named.
+  No debuginfo packages.
+- **`sshd_session_t`, not `sshd_t`,** and **`policykit_auth_t`, not
+  `policykit_t`**: those are the domains that run PAM.
+- **One module for the OS (`mauvely`)**, so later rules (userdb, if it comes)
+  have a home.
+- **The organisation's name under the clock,** hidden when the clock is.
+
+### Not tested until mauvelyd and pam_mauvely are in the image
+
+- Anything over the socket: the code at the login screen, the cache at the lock
+  screen, sudo and polkit for a device admin, the refusal at a text console.
+- The SELinux rules in use: the directory's and the socket's labels on a
+  running system, the transition, and no AVCs from the four domains. Confirm
+  with `ausearch -m avc` (and `audit2allow` only to read, never to write rules).
+- `mauvely-home@` started by mauvelyd on a real system: the labels
+  (`matchpathcon -V` on the folder and on what skel brought), and no AVC from
+  `systemd_tmpfiles_t`.
+- bootc's `/etc` merge carrying the new `authselect.conf`, `system-auth`,
+  `password-auth` and the policy onto a machine that took the update (as the
+  brief expects; `authselect check` on the machine says so).
+- The rebuilt greeter, daemon and helper as the real login screen (only the
+  greeter ran, in test mode). 0001's own list in brief 26 ("Still to prove")
+  still stands.
+- `people.json` written by mauvelyd, and a greeter started after it changes.
+
+### Keeping the PLM patches current
+
+As Breeze's: a base bump that brings a new plasma-login-manager fails the
+build in `plm-build`, naming the patch that no longer applies, and the weekly
+`next` then fails and `stable` stays. Fedora f44 will move to 6.8:
+`spikes/m2/plm-second-prompt-6.8.1.patch` is 0001 for 6.8; 0002 touches
+`main.cpp`, `usermodel.*`, the greeter's `CMakeLists.txt` and `Main.qml`'s clock
+block, and needs re-making against 6.8's tree. Make each with `diff -u` or
+`git diff` against Fedora's prepared tree (`rpmbuild -bp`), keep the header,
+and build.
+
+### For os-agent's half
+
+- `pam_mauvely` must export `pam_sm_authenticate` and `pam_sm_acct_mgmt` (the
+  build checks), return `PAM_IGNORE` for a name that is not one of ours, leave
+  the typed password in `PAM_AUTHTOK` (the wallet lines after the substack),
+  and word its question "Code", never "password" (brief 26, spike 1).
+  `pam_sm_setcred` is never reached through these lines (`pam_localuser`'s
+  setcred succeeds for everyone, so the jump skips it), but export it anyway.
+- The library must come out as `target/release/libpam_mauvely.so`.
+- Start the home unit as `mauvely-home@<username>.service` with the plain
+  name, after the userdb record is written.
+
+### Built and checked (not booted, not pushed as an image)
+
+- `localhost/mauvely-os:m2login3`: a clean clone of `ba4a94c` plus this
+  commit, with os-agent `c261967` (the browser extension's commit needs it;
+  it has no `pam_mauvely` yet) and os-installer `900fb48`, `JOBS=8`.
+  `bootc container lint`: 14 passed, 1 skipped, no warnings. 7.63 GB, 26 MB
+  more than the look's build: the policy store is 21.6 MB of it.
+- In the image: the daemon, helper and greeter belong to
+  `plasma-login-manager-6.7.5-1.mauvely1.fc44`, `rpm -V` finds nothing but
+  the `/run` and `/var` directories; `authselect current` is `mauvely`,
+  `authselect check` passes; `semodule -l` lists `mauvely`; `matchpathcon`
+  gives `/run/mauvely` and `/run/mauvely/auth.sock` their types; the home unit
+  and its guard are there.
+- **The greeter** ran from the image in `--test` under the nested headless
+  sway, with the Mauvely light theme's defaults and a local user `alex`: no
+  file showed Alex's tile and "Other…"; shared showed no tiles, the username
+  field and "Suez Studio" under the date; assigned showed only "Timur Inal",
+  preselected, with "Other…" (which led to the name field and "List Users");
+  with `PLASMALOGIN_MOCK_CODE=1` the assigned person's password brought the
+  "Code" field. The screenshots were in the session's scratchpad, which is
+  not kept.
+- **Two lint warnings on the way, fixed:** `authselect select --force` keeps a
+  backup in `/var/lib/authselect/backups` (now `--nobackup`), and
+  `systemd-analyze verify` leaves `/run/systemd/systemd-units-load`.
+- `dracut` prints "installing '/root' FAILED" while rebuilding the initramfs;
+  it did before this change too, and the initramfs checks pass (96.8 MB).
+
 ## The browser extension in the image (brief 22, S4; 2026-10-22)
 
 os-agent `c261967` has the extension, its native host and the broker's new

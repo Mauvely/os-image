@@ -1,0 +1,33 @@
+policy_module(mauvely, 1.0.0)
+
+# The login socket (brief 26). mauvelyd runs as unconfined_service_t and
+# listens on /run/mauvely/auth.sock. pam_mauvely connects to it from inside
+# each PAM caller, so the callers that run confined need a rule; the rest
+# (the lock screen, sudo, su, people's sessions) run as unconfined_t.
+
+gen_require(`
+	type unconfined_service_t;
+	type xdm_t, local_login_t, sshd_session_t, policykit_auth_t;
+')
+
+# /run/mauvely, the agent's RuntimeDirectory=. systemd creates it with the
+# label from mauvely.fc. Everything the agent writes there inherits it.
+type mauvely_var_run_t;
+files_pid_file(mauvely_var_run_t)
+
+# The socket alone, so that only the domains below can connect to it.
+type mauvely_auth_sock_t;
+files_pid_file(mauvely_auth_sock_t)
+type_transition unconfined_service_t mauvely_var_run_t:sock_file mauvely_auth_sock_t "auth.sock";
+
+# Search /run/mauvely, write the socket, connect to mauvelyd. Nothing else.
+# - xdm_t: plasmalogin-helper, the login screen's PAM.
+# - local_login_t: login, on a text console.
+# - sshd_session_t: sshd-session, OpenSSH 10's privileged half, which runs PAM.
+# - policykit_auth_t: polkit-agent-helper-1 when it runs confined: socket
+#   activated, or started from a confined domain. From a person's own agent
+#   (unconfined_t) it stays unconfined_t.
+stream_connect_pattern(xdm_t, mauvely_var_run_t, mauvely_auth_sock_t, unconfined_service_t)
+stream_connect_pattern(local_login_t, mauvely_var_run_t, mauvely_auth_sock_t, unconfined_service_t)
+stream_connect_pattern(sshd_session_t, mauvely_var_run_t, mauvely_auth_sock_t, unconfined_service_t)
+stream_connect_pattern(policykit_auth_t, mauvely_var_run_t, mauvely_auth_sock_t, unconfined_service_t)

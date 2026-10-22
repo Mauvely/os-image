@@ -1,0 +1,22 @@
+#!/usr/bin/bash
+# home-check <name>: mauvely-home@.service's guard. Succeeds only when <name>
+# is a username by systemd's strict rule (a letter or _, then letters, digits,
+# _ and -, at most 31 in all) and a person: a uid in 20000-59999, the range the
+# server assigns. Anything else, root and the local accounts included, fails
+# the unit before anything is created.
+set -u
+
+name=${1-}
+if ! [[ $name =~ ^[A-Za-z_][A-Za-z0-9_-]{0,30}$ ]]; then
+    printf 'mauvely-home: not a username: %q\n' "$name" >&2
+    exit 1
+fi
+if ! entry=$(getent passwd "$name"); then
+    printf 'mauvely-home: no such person: %s\n' "$name" >&2
+    exit 1
+fi
+IFS=: read -r _ _ uid _ <<<"$entry"
+if ! [[ $uid =~ ^[0-9]+$ ]] || (( uid < 20000 || uid > 59999 )); then
+    printf 'mauvely-home: %s (uid %s) is not a Mauvely person\n' "$name" "$uid" >&2
+    exit 1
+fi

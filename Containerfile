@@ -1,6 +1,7 @@
 # Mauvely OS: the image (brief 19, P5). The pinned Kinoite base, the device agent,
 # the sign-in window, one first-boot unit for the disk, and the removals that
-# keep a machine's apps and updates in the management plane's hands.
+# keep a machine's apps and updates in the management plane's hands. Since
+# brief 26, also signing in at the login screen with a Mauvely account.
 #
 # Build it with scripts/build.sh, which supplies the `agent` and `installer`
 # named contexts and warns when either checkout is not the commit pinned in
@@ -28,6 +29,12 @@ COPY --from=agent Cargo.toml Cargo.lock ./
 COPY --from=agent crates ./crates
 COPY --from=agent tests ./tests
 RUN cargo build --release --locked
+# pam_mauvely (brief 26), when the agent at agent.ref builds it. The image
+# below checks that it ships exactly when mauvelyd serves the login socket.
+RUN mkdir -p /out/security \
+ && if [ -e target/release/libpam_mauvely.so ]; then \
+      cp target/release/libpam_mauvely.so /out/security/pam_mauvely.so; \
+    fi
 
 # ── mauvely-browser-host ─────────────────────────────────────────────────────
 # The browser extension's native host (brief 22, S4; os-agent docs/browser.md).
@@ -112,6 +119,64 @@ RUN vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}' plasma-breeze)" \
  && cmake --build build --target breezedecoration \
  && mkdir /out && cp build/bin/org.kde.breeze.so /out/ && strip -g /out/org.kde.breeze.so
 
+# ── Plasma Login Manager, with a second question and the device's people ─────
+# Brief 26. patches/plasma-login-manager/: 0001 lets a PAM module ask something
+# after the password (the code), 0002 makes the greeter follow
+# /var/lib/mauvely-desktop/people.json. The same way as Breeze above: Fedora's
+# signed source RPM of the base's exact plasma-login-manager, built against
+# the base's version-locked libraries. Unlike Breeze, the whole package is
+# built, since the daemon, the helper and the greeter all change: the patches
+# go into the spec after Fedora's own, the Release gains ".mauvely1", and
+# every RPM lands in /out. It first applies the patches to a prepared tree
+# with --fuzz=0, so that one which no longer applies is named.
+FROM kinoite AS plm-build
+ARG CMAKE_BUILD_PARALLEL_LEVEL=8
+COPY patches/plasma-login-manager/ /patches/
+RUN vr="$(rpm -q --qf '%{VERSION}-%{RELEASE}' plasma-login-manager)" \
+ && dnf -q versionlock add $(rpm -qa --qf '%{NAME}\n' | sort -u) >/dev/null \
+ && dnf -y install --setopt=install_weak_deps=False rpm-build ninja-build \
+ && mkdir -p /src && cd /src \
+ && { dnf download --source --enablerepo=fedora-source --enablerepo=updates-source "plasma-login-manager-$vr" \
+      || { echo "plm-build: Fedora no longer serves the source of plasma-login-manager-$vr; move the base (scripts/bump-base.sh)" >&2; exit 1; }; } \
+ && rpmkeys --dbpath /src/keys --import "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$(rpm -E %fedora)-primary" \
+ && rpmkeys --dbpath /src/keys --checksig "plasma-login-manager-$vr.src.rpm" | grep -q 'signatures OK' \
+ && rpm -i --define '_topdir /src/rpmbuild' "plasma-login-manager-$vr.src.rpm" \
+ && spec=/src/rpmbuild/SPECS/plasma-login-manager.spec \
+ && dnf -y builddep --setopt=install_weak_deps=False "$spec" \
+ && rpmbuild --define '_topdir /src/rpmbuild' -bp "$spec" \
+ && cd "$(find /src/rpmbuild/BUILD -maxdepth 2 -type d -name "plasma-login-manager-${vr%-*}")" \
+ && for p in /patches/*.patch; do \
+      patch -p1 --forward --batch --fuzz=0 < "$p" \
+        || { echo "plm-build: $p no longer applies to plasma-login-manager-$vr; refresh it (HANDOFF.md)" >&2; exit 1; }; \
+    done \
+ && cd /src \
+ && { grep -q '^%autosetup -p1' "$spec" \
+      || { echo "plm-build: the spec no longer applies its patches with %autosetup -p1" >&2; exit 1; }; } \
+ && cp /patches/*.patch /src/rpmbuild/SOURCES/ \
+ && n=9000 && for p in /patches/*.patch; do \
+      n=$((n + 1)) \
+      && last="$(grep -n '^Patch[0-9]*:' "$spec" | tail -n 1 | cut -d: -f1)" \
+      && sed -i "${last}a Patch$n: ${p##*/}" "$spec" || exit 1; \
+    done \
+ && sed -i -E 's/^(Release:[[:space:]]*)([0-9]+)/\1\2.mauvely1/' "$spec" \
+ && grep -q '^Release:.*\.mauvely1' "$spec" \
+ && test "$(grep -c '^Patch90[0-9][0-9]:' "$spec")" = "$(ls /patches/*.patch | wc -l)" \
+ && rpmbuild --define '_topdir /src/rpmbuild' --define '_default_patch_fuzz 0' \
+      --define "_smp_build_ncpus $CMAKE_BUILD_PARALLEL_LEVEL" --define 'debug_package %{nil}' -bb "$spec" \
+ && mkdir /out && cp /src/rpmbuild/RPMS/*/*.rpm /out/
+
+# ── the login socket's SELinux policy ────────────────────────────────────────
+# selinux/: a type for /run/mauvely/auth.sock and connectto for the confined
+# PAM callers (brief 26). Built against selinux-policy-devel at the base's own
+# policy version.
+FROM kinoite AS selinux-build
+COPY selinux/ /src/
+RUN dnf -q versionlock add $(rpm -qa --qf '%{NAME}\n' | sort -u) >/dev/null \
+ && dnf -y install --setopt=install_weak_deps=False \
+      "selinux-policy-devel-$(rpm -q --qf '%{VERSION}-%{RELEASE}' selinux-policy)" \
+ && cd /src && make -f /usr/share/selinux/devel/Makefile mauvely.pp \
+ && mkdir /out && cp mauvely.pp /out/
+
 # ── the image ────────────────────────────────────────────────────────────────
 FROM kinoite
 
@@ -129,13 +194,33 @@ LABEL org.opencontainers.image.title="Mauvely OS" \
 # DrKonqi, the crash reporter that needs Konsole. An admin assigns the Konsole
 # Flatpak to the collections that need one.
 # Inter and JetBrains Mono are the Mauvely look's interface and fixed-width fonts.
+# Plasma Login Manager is replaced with plm-build's (brief 26), in this same
+# step: each step that changes a package rewrites the whole RPM database
+# (about 100 MB) into its layer. The rebuild's Release is the base's plus
+# ".mauvely1", so `rpm -U` is a plain upgrade: it still checks dependencies
+# and file conflicts, and nothing is forced. Every package the base has from
+# that source RPM is upgraded, so the KCM stays at the daemon's exact version.
+# The package brings /run/plasmalogin and /var/lib/plasmalogin back, which its
+# tmpfiles.d makes at boot, so they go again, with the ldconfig cache rpm
+# leaves.
 # dnf leaves a cache, a log, a /run directory and, after an install, per-repo
 # state in /var/lib/dnf/repos, all of which `bootc container lint` flags.
+COPY --from=plm-build /out/ /tmp/plm/
 RUN dnf -y remove firefox firefox-langpacks plasma-discover-rpm-ostree \
       konsole konsole-part plasma-drkonqi \
  && dnf -y install --setopt=install_weak_deps=False rsms-inter-fonts jetbrains-mono-fonts \
+ && src="$(rpm -q --qf '%{SOURCERPM}' plasma-login-manager)" \
+ && set -- \
+ && for name in $(rpm -qa --qf '%{NAME} %{SOURCERPM}\n' | awk -v s="$src" '$2 == s { print $1 }'); do \
+      rebuilt=; \
+      for r in /tmp/plm/*.rpm; do [ "$(rpm -qp --qf '%{NAME}' "$r")" = "$name" ] && rebuilt="$r"; done; \
+      [ -n "$rebuilt" ] || { echo "plm: the rebuild has no $name" >&2; exit 1; }; \
+      set -- "$@" "$rebuilt"; \
+    done \
+ && rpm -Uvh "$@" \
  && dnf clean all \
- && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log* /var/lib/dnf/repos
+ && rm -rf /run/dnf /var/cache/libdnf5 /var/log/dnf5.log* /var/lib/dnf/repos \
+      /tmp/plm /run/plasmalogin /var/lib/plasmalogin /var/cache/ldconfig
 
 # The agent, and mauvely-session, which says in each person's session when a
 # restart will finish an update. Both only start when /etc/mauvely/server
@@ -295,6 +380,102 @@ RUN systemctl enable mauvelyd.service mauvely-seal.service \
       rpm-ostreed-automatic.timer rpm-ostreed-automatic.service \
       flatpak-add-fedora-repos.service \
       rpm-ostree-countme.timer rpm-ostree-countme.service
+
+# ── Signing in with a Mauvely account (brief 26) ─────────────────────────────
+# Plasma Login Manager, installed from plm-build at the top. The checks: the
+# daemon, the helper and the greeter are the rebuilt package's own files,
+# resolve every library, and carry each patch.
+RUN for f in /usr/bin/plasmalogin /usr/libexec/plasmalogin-helper /usr/libexec/plasma-login-greeter; do \
+      { rpm -qf "$f" | grep -q '\.mauvely1\.' && ! ldd "$f" | grep -q 'not found'; } \
+        || { echo "plm: $f is not the rebuilt one" >&2; exit 1; }; \
+    done \
+ && ! rpm -V --nomtime plasma-login-manager | grep -E ' /usr/(bin/plasmalogin|libexec/plasmalogin-helper|libexec/plasma-login-greeter)$' \
+ && grep -qa 'Message received from greeter: Respond' /usr/bin/plasmalogin \
+ && python3 -I -c 'import sys; sys.exit("/var/lib/mauvely-desktop/people.json".encode("utf-16-le") not in open(sys.argv[1], "rb").read())' \
+      /usr/libexec/plasma-login-greeter \
+ && ! find /etc /usr \( -name '*.rpmnew' -o -name '*.rpmsave' \) -print | grep .
+
+# pam_mauvely and the PAM wiring. authselect's vendor profile "mauvely" is made
+# from "local" here, not kept as a copy, so Fedora's next change to "local"
+# reaches it. system-auth and password-auth gain three lines before pam_unix,
+# in both auth and account:
+#   [success=2 default=ignore]               pam_localuser.so
+#   [success=1 default=ignore]               pam_localuser.so file=/usr/lib/passwd
+#   [success=done ignore=ignore default=die] pam_mauvely.so
+# - Anyone in /etc/passwd (root, the local accounts, break-glass) or in
+#   /usr/lib/passwd (the system accounts, the login screen's own among them)
+#   skips pam_mauvely, so a missing module or a dead daemon locks none of them
+#   out.
+# - For everyone else pam_mauvely decides: success ends the stack, PAM_IGNORE
+#   falls through to pam_unix, anything else fails it.
+# The image selects the profile with the base's own features. The checks:
+# authselect's own; the profile differs from "local" by those six lines and
+# nothing else; and they sit, in order, right before pam_unix. authselect's
+# checksum in /var goes, as the base has none: /var is never updated from an
+# image, and `authselect check` passes without it.
+# pam_mauvely ships exactly when mauvelyd serves /run/mauvely/auth.sock. An
+# agent.ref from before the socket builds no module; the lines then refuse
+# nobody who could sign in before.
+COPY --from=agent-build /out/security/ /usr/lib64/security/
+RUN m=/usr/lib64/security/pam_mauvely.so \
+ && if grep -qa 'auth\.sock' /usr/bin/mauvelyd; then \
+      test -f "$m" || { echo "pam: mauvelyd serves the login socket, but agent.ref builds no pam_mauvely" >&2; exit 1; }; \
+      python3 -I -c 'import ctypes, os, sys; ctypes.CDLL("libpam.so.0", os.RTLD_NOW | os.RTLD_GLOBAL); m = ctypes.CDLL(sys.argv[1], os.RTLD_NOW); m.pam_sm_authenticate; m.pam_sm_acct_mgmt' "$m"; \
+    else \
+      test ! -e "$m" || { echo "pam: pam_mauvely without the socket in mauvelyd" >&2; exit 1; }; \
+    fi \
+ && test "$(head -n 1 /etc/authselect/authselect.conf)" = local \
+ && features="$(tail -n +2 /etc/authselect/authselect.conf | tr '\n' ' ')" \
+ && authselect create-profile mauvely --vendor --base-on local --symlink-nsswitch --symlink-dconf \
+      -s postlogin -s fingerprint-auth -s smartcard-auth -s switchable-auth -s REQUIREMENTS \
+ && p=/usr/share/authselect/vendor/mauvely \
+ && printf '%s\n' 'Mauvely OS' '==========' '' \
+      'Local users, and people who sign in with their Mauvely account through pam_mauvely.' \
+      'Made from "local" when the image is built (os-image, Containerfile).' > "$p/README" \
+ && for f in system-auth password-auth; do \
+      awk 'function ours(t) { \
+             printf "%-12s%-45s%s\n", t, "[success=2 default=ignore]", "pam_localuser.so"; \
+             printf "%-12s%-45s%s\n", t, "[success=1 default=ignore]", "pam_localuser.so file=/usr/lib/passwd"; \
+             printf "%-12s%-45s%s\n", t, "[success=done ignore=ignore default=die]", "pam_mauvely.so" } \
+           /^auth[ \t]+sufficient[ \t]+pam_unix\.so/ { ours("auth"); a++ } \
+           /^account[ \t]+required[ \t]+pam_unix\.so/ { ours("account"); c++ } \
+           { print } \
+           END { exit !(a == 1 && c == 1) }' "$p/$f" > "$p/$f.new" \
+        || { echo "authselect: $f: no single pam_unix line to put pam_mauvely before; read Fedora's local profile" >&2; exit 1; }; \
+      mv "$p/$f.new" "$p/$f"; \
+    done \
+ && authselect select mauvely $features --force --nobackup \
+ && authselect check \
+ && test "$(head -n 1 /etc/authselect/authselect.conf)" = mauvely \
+ && for f in system-auth password-auth; do \
+      authselect test local $features --$f > /tmp/local \
+      && authselect test mauvely $features --$f > /tmp/mauvely \
+      && test -z "$(diff /tmp/local /tmp/mauvely | grep '^<')" \
+      && test "$(diff /tmp/local /tmp/mauvely | grep -c '^>')" = 6 \
+      && test "$(diff /tmp/local /tmp/mauvely | grep '^>' | grep -c 'pam_localuser\.so\|pam_mauvely\.so')" = 6 \
+      && for t in auth account; do \
+           awk -v t="$t" '$1 == t { for (i = 2; i <= NF; i++) if ($i ~ /^pam_[a-z0-9_]+\.so$/) { printf "%s ", $i; break } }' \
+             "/etc/authselect/$f" | grep -q 'pam_localuser\.so pam_localuser\.so pam_mauvely\.so pam_unix\.so ' || exit 1; \
+         done \
+      && test "$(readlink "/etc/pam.d/$f")" = "/etc/authselect/$f" || { echo "authselect: $f is not as built" >&2; exit 1; }; \
+    done \
+ && rm -rf /tmp/local /tmp/mauvely /var/lib/authselect
+
+# The login socket's SELinux policy, from selinux-build: /run/mauvely/auth.sock
+# gets its own type, and only the confined PAM callers may connect (selinux/
+# says which, and why those). The package stays in /usr/share/selinux/packages
+# as well, the way Fedora's policy packages keep theirs.
+COPY --from=selinux-build /out/mauvely.pp /usr/share/selinux/packages/mauvely.pp
+RUN semodule -n -i /usr/share/selinux/packages/mauvely.pp \
+ && semodule -l | grep -qx mauvely \
+ && grep -q '^/run/mauvely/auth\\\.sock[[:space:]].*mauvely_auth_sock_t' /etc/selinux/targeted/contexts/files/file_contexts \
+ && rm -rf /etc/selinux/targeted/previous
+
+# Home folders for people, made by mauvely-home@<username>.service, which
+# mauvelyd starts after a first sign-in (in rootfs/, with its guard).
+RUN test -x /usr/libexec/mauvely/home-check \
+ && systemd-analyze verify --man=no mauvely-home@check.service \
+ && rm -f /run/systemd/systemd-units-load
 
 # The boot splash (brief 25): Plymouth's two-step plugin with the Mauvely mark
 # where the splash screen puts it, on the same ground. The spinner, the disk

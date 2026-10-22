@@ -1,0 +1,2 @@
+/run/mauvely(/.*)?		gen_context(system_u:object_r:mauvely_var_run_t,s0)
+/run/mauvely/auth\.sock	-s	gen_context(system_u:object_r:mauvely_auth_sock_t,s0)
