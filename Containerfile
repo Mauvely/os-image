@@ -14,7 +14,7 @@
 # (scripts/bump-base.sh, which looks for this one line). Moving to 45 is a
 # deliberate commit; it is still in Beta. The Breeze stage and the image both
 # start from it.
-FROM quay.io/fedora-ostree-desktops/kinoite:44.20261019.0 AS kinoite
+FROM quay.io/fedora-ostree-desktops/kinoite:44.20261026.0 AS kinoite
 
 # ── mauvelyd ─────────────────────────────────────────────────────────────────
 # Built on Fedora 44, the base's own release, so the binary links the same glibc.
